@@ -816,6 +816,28 @@ final class ConnectivityMergeTests: XCTestCase {
         }
     }
 
+    func testPeerAttemptOnRecoveredNoteFollowsReviewInsteadOfBlockingRecovery() async throws {
+        let h = try SyncHarness(); defer { h.remove() }
+        let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Interrupted on Watch",
+            titleSource: .timestamp, createdAt: Date(), duration: 1, source: .appleWatch,
+            captureOutcome: .interrupted, requiresReview: true)
+        let envelope = ConnectivityEnvelope(payload: .noteMetadata(metadata))
+        let merge = try h.merge()
+        _ = try await merge.receiveFile(at: h.fixture, metadata: envelope)
+        _ = try await merge.apply(envelope)
+        let imported = try await h.store.note(id: metadata.id)
+        XCTAssertEqual(imported?.requiresReview, true)
+        // The user taps Send on the Watch; only the Watch clears review, then reports its attempt.
+        let attempt = Attempt(noteID: metadata.id, configurationRevisionID: ConfigurationRevisionID(), device: .appleWatch,
+            endpoint: .init(scheme: "https", host: "example.com", path: "/receive"), startedAt: Date())
+        let restarted = try h.merge()
+        _ = try await restarted.apply(ConnectivityEnvelope(payload: .attempt(.started(attempt))))
+        try await restarted.recover()
+        try await h.merge().recover()
+        let note = try await h.store.note(id: metadata.id)
+        XCTAssertEqual(note?.requiresReview, false)
+    }
+
     func testTruncatedNoteAudioFromInterruptedImportIsReplaced() async throws {
         let h = try SyncHarness(); defer { h.remove() }
         let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Watch recording",

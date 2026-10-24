@@ -264,12 +264,20 @@ public actor ConnectivityMergeService {
     }
 
     private func mergeState(_ id: NoteID) async throws -> NoteID? {
-        guard try await store.note(id: id) != nil else { return nil }
+        guard let note = try await store.note(id: id) else { return nil }
         let current = try generation()
         let messages = try journal.inbox().filter { $0.payload.noteID == id && $0.generation == current }
         for message in messages {
             switch message.payload {
-            case .attempt(let attempt): _ = try await store.apply(attempt.event, to: id)
+            case .attempt(let attempt):
+                // The peer only attempts a recovered Note after the user sent it there; review
+                // is not synchronized, so follow that decision here. A still-ineligible Note
+                // (e.g. audio unreadable on this device) skips the peer's record: rejecting it
+                // would fail every later recovery pass and block all peer sync.
+                do {
+                    if case .started = attempt, note.requiresReview { try await store.send(noteID: id) }
+                    _ = try await store.apply(attempt.event, to: id)
+                } catch WhimStoreError.notEligible { continue }
             case .receipt(let receipt): _ = try await store.apply(.receipt(receipt), to: id)
             case .audioUnavailable(let response) where device == .iphone:
                 try await rejectAudio(id, respondingTo: response.requestID)
