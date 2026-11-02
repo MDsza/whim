@@ -248,7 +248,12 @@ final class WatchModelIntegrationTests: XCTestCase {
         await model.activate()
         await model.stop()
         try await fixture.transport.waitForRequests(1)
-        let database = try DatabaseQueue(path: fixture.root.appendingPathComponent("whim.sqlite").path)
+        // Schema injection shares the live store's busy handling while event
+        // refreshes and delivery still access the same database.
+        var databaseConfiguration = Configuration()
+        databaseConfiguration.busyMode = .timeout(5)
+        let database = try DatabaseQueue(path: fixture.root.appendingPathComponent("whim.sqlite").path,
+            configuration: databaseConfiguration)
         defer { try? database.close() }
         // Fixture-only schema fault breaks the timeline query while Note-by-ID delivery
         // writes still succeed, so the real delivery event exercises the failing refresh.

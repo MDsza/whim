@@ -1,0 +1,22 @@
+appId: app.whim.ios
+---
+- runFlow: flows/clean-launch.yaml
+# Hold automatic composition so the first rendered home must accept Record itself.
+- launchApp:
+    clearState: false
+    arguments:
+      -WhimFixtureAudio: ${WHIM_FIXTURE_AUDIO}
+      -WhimStartupDelayMilliseconds: '30000'
+- assertVisible:
+    id: record-button
+    enabled: true
+- assertNotVisible: Preparing recording…
+- tapOn:
+    id: record-button
+- assertVisible:
+    id: recorder-panel
+- tapOn:
+    id: stop-recording
+- assertVisible: Note saved
+- assertNotVisible:
+    id: recorder-panel

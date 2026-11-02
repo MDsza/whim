@@ -70,7 +70,7 @@ struct OnboardingView: View {
                 }
             }
         }
-        .disabled(model.isPending || !model.captureReady || webhook.isPending)
+        .disabled(model.isPending || model.startupState == nil || webhook.isPending)
         .sensoryFeedback(.selection, trigger: step)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("onboarding")

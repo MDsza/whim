@@ -9,13 +9,17 @@ struct PendingIPhoneLink { let id = UUID(); let url: URL }
     @State private var showsStorageInstructions = false
     private let onboarding = UserDefaultsOnboardingStore()
     @State private var starting = false
+    @State private var startingRecording = false
     @State private var pendingLink: PendingIPhoneLink?
     var body: some Scene {
         WindowGroup {
             Group {
                 if let model { IPhoneRootView(model: model, pendingLink: pendingLink) }
                 else {
-                    IPhoneStartupShell(onboardingCompleted: onboarding.isComplete())
+                    IPhoneStartupShell(onboardingCompleted: onboarding.isComplete(), recordingPending: startingRecording,
+                        canRecord: failure?.blocksCapture != true) {
+                        Task { await recordFromStartup() }
+                    }
                         .safeAreaInset(edge: .top) {
                             if let failure {
                                 WhimErrorContainer(message: failure.message, actionLabel: failure.actionLabel, busy: starting) {
@@ -41,8 +45,35 @@ struct PendingIPhoneLink { let id = UUID(); let url: URL }
         guard !starting, model == nil else { return }; starting = true
         defer { starting = false }
         do {
-            model = IPhoneModel(client: try await WhimRuntime.shared.service(), onboardingCompletedHint: onboarding.isComplete())
+            #if DEBUG
+            // Hold only the automatic launch task to exercise the first rendered shell.
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("-WhimFixtureAudio"),
+               let index = arguments.firstIndex(of: "-WhimStartupDelayMilliseconds"),
+               arguments.indices.contains(index + 1), let delay = Int(arguments[index + 1]), delay > 0 {
+                try await Task.sleep(for: .milliseconds(delay))
+            }
+            #endif
+            _ = try await mountModel()
             failure = nil
+        } catch is CancellationError {} catch { failure = ActionableFailure(error, operation: .preparation) }
+    }
+    @MainActor private func mountModel() async throws -> IPhoneModel {
+        let client = try await WhimRuntime.shared.service()
+        // Automatic startup and the first Record tap may await the same composition.
+        if let model { return model }
+        let value = IPhoneModel(client: client, onboardingCompletedHint: onboarding.isComplete())
+        model = value
+        return value
+    }
+    @MainActor private func recordFromStartup() async {
+        guard !startingRecording else { return }
+        startingRecording = true
+        defer { startingRecording = false }
+        do {
+            let model = try await mountModel()
+            failure = nil
+            await model.startRecording()
         } catch { failure = ActionableFailure(error, operation: .preparation) }
     }
 }

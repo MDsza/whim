@@ -17,6 +17,12 @@ struct RecordWhimIntent: AudioRecordingIntent {
         false
         #endif
     }
+    #if os(iOS)
+    // Prefer background capture. Dynamic continuation still lets permission or
+    // activity failures offer to open Whim for recovery.
+    @available(iOS 26.0, *)
+    static var supportedModes: IntentModes { [.background, .foreground(.dynamic)] }
+    #endif
     static var authenticationPolicy: IntentAuthenticationPolicy { .alwaysAllowed }
     @Dependency(default: WhimRuntime.shared) private var runtime: WhimRuntime
     init() {}
@@ -28,7 +34,7 @@ struct RecordWhimIntent: AudioRecordingIntent {
         .iphone
         #endif
     }
-    @MainActor func perform() async throws -> some IntentResult {
+    func perform() async throws -> some IntentResult {
         #if WHIM_WIDGET_EXTENSION
         try requireRecordingHostProcess()
         return .result()

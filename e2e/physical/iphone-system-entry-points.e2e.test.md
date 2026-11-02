@@ -26,6 +26,24 @@ With the assigned shortcut, press and hold the physical Action button as require
 
 Expected: the first invocation starts capture and its Live Activity. The second invocation stops capture, ends the activity, saves exactly one playable Note, and starts Delivery without opening Whim. A configured, reachable webhook receives the Note and Whim shows Sent. Repeat after ordinary process termination, offline (Queued), and without configuration (Setup required). Capture external video that includes both hardware presses; simulator intent execution is insufficient evidence.
 
+## QC-1 — Time to visible recording feedback
+
+Record an external video of Control Center and Action-button capture separately,
+with Whim warm and after ordinary process termination, while locked and unlocked.
+Measure from the control accepting the tap or the Action-button hold completing
+to the first visible Whim recording timer/Stop content. Separately record when the
+Island becomes compact; the system's expanded toast must not be counted as absent
+feedback if it already shows the recording. Speak immediately and play the saved
+Note to check initial speech preservation. Repeat each condition three times.
+
+Expected: capture needs no foreground navigation and feedback is prompt. Treat a
+repeated multi-second blank interval as a failure; record the timings and build
+instead of inferring responsiveness from intent completion. Where development
+traces are available, distinguish OS dispatch, intent entry, activity request,
+first rendered content, and microphone onset. The iPhone 18 Pro simulator showed
+a cold delay before intent entry even after removing the main-actor dependency;
+this case remains pending physical acceptance.
+
 ## RP-1 — Repeated and alternating entry points
 
 Start using the Lock Screen control, then invoke the Action button to stop and send. Invoke the Action button again to start a new session, then use the Lock Screen control to stop it. Repeat using Siri's Record shortcut as the second invocation. Start in Whim and stop using the Action button on another run. Open Whim during recording and return to the Lock Screen.

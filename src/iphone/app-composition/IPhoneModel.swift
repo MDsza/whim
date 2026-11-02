@@ -128,7 +128,10 @@ import WhimCore
     public private(set) var maintenanceError: IPhoneError? { didSet { reconcileCollapsedFailures() } }
     @ObservationIgnored private var maintenanceTask: Task<Void, Never>?
     private var failedPlaybackNoteID: NoteID?
-    public var captureReady: Bool { startupState != nil }
+    public var captureReady: Bool { !activeFailures.contains(where: \.blocksCapture) }
+    @ObservationIgnored private var stoppingForFailure = false
+    @ObservationIgnored private var captureFailureNotice: String?
+    @ObservationIgnored private var captureFailureSessionID: String?
     public private(set) var isResolvingError = false
     @ObservationIgnored private var lastCaptureCommand = CaptureCommand.start
     private enum CaptureCommand { case start, stop, discard }
@@ -284,6 +287,7 @@ import WhimCore
             if let recording { elapsedSeconds = max(elapsedSeconds, Date().timeIntervalSince(recording.createdAt)) }
             if recording != nil || !onboardingCompleted { isHistoryPresented = false }
         } catch is CancellationError {} catch { self.error = IPhoneError(error, operation: .preparation) }
+        await stopForBlockingFailure()
     }
 
     private func loadSnapshot() async {
@@ -322,6 +326,7 @@ import WhimCore
             } catch {
                 guard let self, !Task.isCancelled else { return }
                 self.maintenanceError = IPhoneError(error, operation: .maintenance)
+                await self.stopForBlockingFailure()
                 // Recovery may have made partial progress before an unrelated candidate failed.
                 await self.loadHistory(generation: self.refreshGeneration)
             }
@@ -339,6 +344,7 @@ import WhimCore
             sortNotes()
         } catch is CancellationError {} catch {
             if generation == refreshGeneration { historyError = IPhoneError(error, operation: .history) }
+            await stopForBlockingFailure()
         }
     }
 
@@ -351,6 +357,7 @@ import WhimCore
             settingsError = nil
         } catch is CancellationError {} catch {
             if generation == refreshGeneration { settingsError = IPhoneError(error, operation: .settings) }
+            await stopForBlockingFailure()
         }
     }
     public func perform(_ operation: () async throws -> Void) async {
@@ -369,16 +376,22 @@ import WhimCore
     }
     public func startRecording() async {
         guard recording == nil else { return }
+        captureFailureNotice = nil
+        captureFailureSessionID = nil
         lastCaptureCommand = .start
         await capture {
             await stopInlinePlayback()
-            _ = try await client.startRecording(source: .iphone)
+            let revision = captureRevision
+            let value = try await client.startRecording(source: .iphone)
+            try await reconcileRecording(value, since: revision)
         }
     }
     public func stopRecording() async {
         lastCaptureCommand = .stop
         await capture {
+            let revision = captureRevision
             let note = try await client.stopRecording()
+            try await reconcileRecording(nil, since: revision)
             if let note {
                 notes.removeAll { $0.id == note.id }; notes.append(note); sortNotes()
                 feedback = "Note saved"
@@ -387,15 +400,74 @@ import WhimCore
     }
     public func discardRecording() async {
         lastCaptureCommand = .discard
-        await capture { try await client.discardRecording(); feedback = "Recording discarded" }
+        await capture {
+            let revision = captureRevision
+            try await client.discardRecording()
+            try await reconcileRecording(nil, since: revision)
+            feedback = "Recording discarded"
+        }
     }
     private func capture(_ operation: () async throws -> Void) async {
         guard !isRecordingPending else { return }; isRecordingPending = true; error = nil
-        defer { isRecordingPending = false }
         do {
             try await operation()
-            await refreshCapture()
         } catch is CancellationError {} catch { self.error = IPhoneError(error) }
+        isRecordingPending = false
+        await stopForBlockingFailure()
+    }
+    private func reconcileRecording(_ result: RecordingProjection?, since revision: Int) async throws {
+        var value = result
+        if revision != captureRevision {
+            // Events may include this command or a newer Shortcut/reset. Read only
+            // the active session; never join startup, history, or optional checks.
+            let before = captureRevision
+            value = try await client.activeRecording()
+            guard before == captureRevision else { return }
+        }
+        if value?.sessionID != recording?.sessionID { elapsedSeconds = 0; peakPowerDBFS = -160; recordingTone = 0 }
+        captureRevision += 1; recording = value
+        if value != nil { isHistoryPresented = false }
+    }
+    /// Late checks may stop capture, but never discard the audio the user just recorded.
+    private func stopForBlockingFailure() async {
+        guard recording != nil, !isRecordingPending, !stoppingForFailure,
+              let failure = activeFailures.first(where: \.blocksCapture) else { return }
+        let sessionID = recording?.sessionID
+        stoppingForFailure = true
+        isRecordingPending = true
+        defer {
+            stoppingForFailure = false; isRecordingPending = false
+            if let recording, recording.sessionID != sessionID {
+                Task { await self.stopForBlockingFailure() }
+            }
+        }
+        captureFailureSessionID = sessionID
+        captureFailureNotice = "Recording stopped. " + failure.message
+        do {
+            let revision = captureRevision
+            let note = try await client.stopRecording()
+            try await reconcileRecording(nil, since: revision)
+            if let note {
+                notes.removeAll { $0.id == note.id }; notes.append(note); sortNotes()
+            }
+            if captureFailureSessionID == sessionID {
+                captureFailureNotice = "Recording stopped. " + (note == nil ? "No usable audio was saved. " : "Note saved. ") + failure.message
+                feedback = captureFailureNotice ?? ""
+            }
+        } catch {
+            // Finalization preserves recoverable audio on disk even if saving the Note fails.
+            let failure = IPhoneError(error)
+            self.error = failure
+            let before = captureRevision
+            do {
+                let active = try await client.activeRecording()
+                if before == captureRevision { captureRevision += 1; recording = active }
+            } catch { /* Keep the last known state. */ }
+            if captureFailureSessionID == sessionID {
+                captureFailureNotice = (recording == nil ? "Recording stopped. " : "Recording could not stop. ") + failure.recovery.message
+                feedback = captureFailureNotice ?? ""
+            }
+        }
     }
     private func receive(_ event: WhimEvent) {
         guard event.sequence > lastSequence else { return }
@@ -407,20 +479,23 @@ import WhimCore
         fold(event)
         switch event.type {
         case .recordingStarted:
+            if event.recording?.sessionID != captureFailureSessionID {
+                captureFailureNotice = nil; captureFailureSessionID = nil
+            }
             completionGeneration += 1
             if previousSessionID != event.recording?.sessionID {
                 elapsedSeconds = 0; peakPowerDBFS = -160; recordingTone = 0
             }
             feedback = "Recording started"
         case .recordingStopped:
-            feedback = "Recording stopped"
+            feedback = captureFailureNotice ?? "Recording stopped"
             completionGeneration += 1
             let generation = completionGeneration
             if let finishingID, let uuid = UUID(uuidString: finishingID) {
                 Task { [weak self, client] in
                     let saved = try? await client.note(id: NoteID(rawValue: uuid))
                     guard let self, generation == self.completionGeneration, saved != nil else { return }
-                    self.feedback = "Note saved"
+                    self.feedback = self.captureFailureNotice ?? "Note saved"
                 }
             }
         case .recordingDiscarded, .notesReset:

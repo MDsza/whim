@@ -292,3 +292,11 @@ running iOS 27 at normal and maximum accessibility text sizes. The progress head
 stays on one line, primary and secondary action labels wrap without truncation,
 and privacy copy moves into the scrolling content at accessibility sizes. The
 physical-device cases above remain pending.
+
+## Immediate Record on launch
+
+Status: pending physical execution. Complete onboarding and grant microphone access. Cold-launch with an empty store, then with many saved Notes and an unfinished older Recording Session. Tap Record on the first visible home frame and speak immediately. Verify there is no “Preparing recording” state, the first tap starts one session as soon as essential storage/hardware setup succeeds, initial speech is present on playback, and Stop remains responsive during recovery. Opening alone must not start capture.
+
+While recording, reproduce a genuinely blocking condition where safely feasible (for example storage exhaustion). Verify capture stops, Whim explains the reason, and usable audio remains saved or visibly recoverable if finalization cannot complete. An unrelated webhook/recovery failure must leave capture running. Do not fill a personal device merely to execute this case.
+
+Closest deterministic coverage: suspended-inventory WhimClient integration, suspended-startup IPhoneModel integration, late storage-full stop/preservation regression, and the installed immediate-record-on-launch journey. These do not measure physical microphone onset or prove preservation of initial speech.

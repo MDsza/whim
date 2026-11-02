@@ -25,6 +25,10 @@ appId: app.whim.ios
     id: webhook-url
 - inputText: https://whim-fixture.invalid/receive
 - assertVisible: https://whim-fixture.invalid/receive
+- assertVisible:
+    id: webhook-keyboard-done
+# Wait for the keyboard transition before resolving its toolbar's accessibility bounds.
+- waitForAnimationToEnd
 - tapOn:
     id: webhook-keyboard-done
 - extendedWaitUntil:

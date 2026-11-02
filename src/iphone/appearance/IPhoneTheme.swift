@@ -181,6 +181,10 @@ struct WhimErrorContainer: View {
 
 struct IPhoneStartupShell: View {
     let onboardingCompleted: Bool
+    var recordingPending = false
+    var canRecord = true
+    var record: () -> Void = {}
+    @Namespace private var glassNamespace
     @AppStorage("onboarding.v1.step", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var onboardingStep = 0
     @Environment(\.dynamicTypeSize) private var textSize
     var body: some View {
@@ -188,7 +192,13 @@ struct IPhoneStartupShell: View {
             Color.black.ignoresSafeArea()
             if onboardingCompleted {
                 Rectangle().fill(.white).frame(height: 1).padding(.horizontal, 24)
-                VStack { Spacer(); ProgressView("Preparing recording…").padding(.bottom, 48) }
+                VStack {
+                    Spacer()
+                    CaptureGlassContainer(isRecording: false) {
+                        CaptureRecordButton(glassNamespace: glassNamespace,
+                            disabled: recordingPending || !canRecord, action: record)
+                    }.padding(.bottom, 96)
+                }
             } else {
                 OnboardingFrame(step: onboardingStep) {
                     switch onboardingStep {
@@ -201,7 +211,8 @@ struct IPhoneStartupShell: View {
                     if onboardingStep == 0 && !textSize.isAccessibilitySize { OnboardingPrivacyText() }
                 }
             }
-        }.accessibilityIdentifier(onboardingCompleted ? "whim-home" : "onboarding")
+        }.accessibilityElement(children: .contain)
+            .accessibilityIdentifier(onboardingCompleted ? "whim-home" : "onboarding")
     }
 }
 

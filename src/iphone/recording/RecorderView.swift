@@ -48,16 +48,9 @@ struct CaptureHomeView: View {
                     Text(model.feedback).font(.footnote).foregroundStyle(.secondary).padding(
                         .bottom, 20)
                 }
-                Button {
+                CaptureRecordButton(glassNamespace: glassNamespace, disabled: model.isRecordingPending || !model.captureReady) {
                     Task { await model.startRecording() }
-                } label: {
-                    Circle().fill(.white).frame(width: 26, height: 26)
-                        .frame(width: 80, height: 80).whimGlass(in: Circle())
-                        .captureGlassIdentity("capture", in: glassNamespace)
-                }.buttonStyle(.plain).accessibilityLabel("Record a Whim")
-                    .accessibilityIdentifier("record-button")
-                    .disabled(model.isRecordingPending || !model.captureReady)
-                if !model.captureReady { ProgressView("Preparing recording…") }
+                }
                 Button {
                     model.openHistory()
                 } label: {
@@ -73,6 +66,20 @@ struct CaptureHomeView: View {
                     .accessibilityIdentifier("history-hint")
             }.accessibilityElement(children: .contain).accessibilityIdentifier("whim-home")
         }
+    }
+}
+
+struct CaptureRecordButton: View {
+    let glassNamespace: Namespace.ID
+    var disabled = false
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Circle().fill(.white).frame(width: 26, height: 26)
+                .frame(width: 80, height: 80).whimGlass(in: Circle())
+                .captureGlassIdentity("capture", in: glassNamespace)
+        }.buttonStyle(.plain).accessibilityLabel("Record a Whim")
+            .accessibilityIdentifier("record-button").disabled(disabled)
     }
 }
 

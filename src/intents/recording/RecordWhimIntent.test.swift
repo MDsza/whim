@@ -3,6 +3,33 @@ import WhimCore
 import XCTest
 
 @MainActor final class RecordWhimIntentTests: XCTestCase {
+    // Break: quick capture omits its background preference or loses foreground recovery.
+    func testQuickCapturePrefersBackgroundAndRetainsForegroundRecovery() throws {
+        if #available(iOS 26, *) {
+            XCTAssertEqual(RecordWhimIntent.supportedModes, [.background, .foreground(.dynamic)])
+        }
+    }
+
+    // Break: background capture waits for unrelated scene work on the main actor.
+    func testBackgroundInvocationStartsActivityWhileTheMainActorIsBusy() async throws {
+        let fixture = try WhimFacadeHarness()
+        defer { fixture.remove() }
+        let permissions = MutablePermissions()
+        await permissions.grant()
+        let requested = DispatchSemaphore(value: 0)
+        let client = fixture.makeService(permissions: permissions,
+            activity: SignallingActivity(requested: requested))
+        let intent = RecordWhimIntent(runtime: WhimRuntime(make: { client }))
+        let invocation = Task.detached { _ = try await intent.perform() }
+
+        // Deliberately occupy the UI actor, as a cold scene launch can do. Only
+        // the activity boundary signals this; no owned service module is mocked.
+        XCTAssertEqual(requested.wait(timeout: .now() + 3), .success,
+            "Publishing the recording activity must not wait for the UI actor")
+        try await invocation.value
+        try await client.discardRecording()
+    }
+
     // Break: a second iPhone shortcut invocation only focuses capture instead of saving and delivering it.
     func testSecondInvocationStopsAndSendsThenNextInvocationStartsANewSession() async throws {
         let fixture = try WhimFacadeHarness()
@@ -81,6 +108,13 @@ import XCTest
         let recording = try await client.activeRecording()
         XCTAssertNil(recording)
     }
+}
+
+private struct SignallingActivity: RecordingActivityManaging {
+    let requested: DispatchSemaphore
+    func start(_ recording: RecordingSnapshot) async throws { requested.signal() }
+    func update(sessionID: RecordingSessionID, signal: RecordingSignal) async {}
+    func end(sessionID: RecordingSessionID) async {}
 }
 
 private struct UnavailableActivity: RecordingActivityManaging {

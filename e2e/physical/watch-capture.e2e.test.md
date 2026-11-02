@@ -40,6 +40,16 @@ capture in this acceptance run.
 
 During capture, verify Discard is red with a minimum 100 × 44 point target. Tap beside the text within the button: capture ends immediately without confirmation, and recent Notes contains no new Note. Repeat with VoiceOver.
 
+## Capture control bounds and history toolbar
+
+On the normal capture screen, verify the touch target and VoiceOver focus cover
+the full 72 point glass circle rather than only its center symbol. Tap between
+the symbol and the circle's edge to Stop, then repeat to Record. Scroll to
+Previous Notes and verify the first Note clears the native toolbar by at least
+44 points, including with large text. The installed Watch UI cases cover the
+control bounds, off-center taps, and toolbar clearance; physical VoiceOver
+acceptance remains required.
+
 ## Double-tap recording control
 
 On a Watch that supports the system Double Tap gesture, enable Double Tap in Settings

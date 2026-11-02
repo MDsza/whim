@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { test } from 'node:test';
 
 async function phase(name, env = {}, failure) {
@@ -133,4 +137,75 @@ fi
   assert.match(commands, /cli-2\.10\.0\/maestro\.zip/);
   assert.match(commands, /29b675e10cc12080e445e9bfb2e2b4e4dfb9c0f2e30d5884120d258b5e1cd991/);
   assert.equal(run(true).status, 1, 'a failed checksum must block the hook');
+});
+
+const execute = promisify(execFile);
+
+async function runWatchTests(t, testStatus, summaryStatus = 0) {
+  const root = await mkdtemp(join(tmpdir(), 'whim-watch-runner-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  async function command(name, source) {
+    const path = join(bin, name);
+    await writeFile(path, `#!/usr/bin/env node\n${source}`);
+    await chmod(path, 0o755);
+  }
+  // Mock only the native codec/Xcode process boundaries. The runner and its
+  // loopback webhook server execute normally, including EXIT cleanup.
+  for (const name of ['python3', 'afconvert']) {
+    await command(name, `require('node:fs').writeFileSync(process.argv.at(-1), 'fixture');`);
+  }
+  await command('xcodebuild', `
+    const fs = require('node:fs');
+    const args = process.argv.slice(2);
+    fs.writeFileSync(process.env.WHIM_TEST_XCODE_ARGS, JSON.stringify(args));
+    const index = args.indexOf('-resultBundlePath');
+    if (index >= 0) fs.mkdirSync(args[index + 1], { recursive: true });
+    process.exit(Number(process.env.WHIM_TEST_XCODE_STATUS));
+  `);
+  await command('xcrun', `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.WHIM_TEST_SUMMARY_ARGS, JSON.stringify(process.argv.slice(2)));
+    console.log(JSON.stringify({ testFailures: [{
+      testName: 'WatchRecordingUITests.testDiscardImmediatelyLeavesNoNote()',
+      failureText: 'Expected the Discard control to be at least 100 points wide.'
+    }] }));
+    process.exit(Number(process.env.WHIM_TEST_SUMMARY_STATUS));
+  `);
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`,
+    WHIM_DERIVED_DATA_PATH: join(root, 'Derived Data'), WHIM_WATCH_SIMULATOR_UDID: 'fixture-watch',
+    WHIM_TEST_XCODE_ARGS: join(root, 'xcode-args.json'), WHIM_TEST_SUMMARY_ARGS: join(root, 'summary-args.json'),
+    WHIM_TEST_XCODE_STATUS: String(testStatus), WHIM_TEST_SUMMARY_STATUS: String(summaryStatus) };
+  let result;
+  try {
+    result = { code: 0, ...await execute('bash', [new URL('./test-watch-e2e.sh', import.meta.url).pathname],
+      { env, timeout: 15_000 }) };
+  } catch (error) { result = error; }
+  const args = await readFile(env.WHIM_TEST_XCODE_ARGS, 'utf8').catch(error => {
+    throw new Error(`Watch runner did not reach xcodebuild (exit ${result.code}): ${result.stderr}`, { cause: error });
+  });
+  return { result, env, args: JSON.parse(args) };
+}
+
+test('failed Watch UI tests expose native assertion details and retain the failing exit status', async t => {
+  const { result, env, args } = await runWatchTests(t, 65);
+  assert.equal(result.code, 65);
+  assert.match(result.stdout, /Expected the Discard control to be at least 100 points wide/);
+  const bundle = args[args.indexOf('-resultBundlePath') + 1];
+  assert.ok(bundle.endsWith('.xcresult'));
+  assert.deepEqual(JSON.parse(await readFile(env.WHIM_TEST_SUMMARY_ARGS, 'utf8')),
+    ['xcresulttool', 'get', 'test-results', 'summary', '--path', bundle]);
+});
+
+test('a failure to read Watch diagnostics cannot replace the original test failure', async t => {
+  const { result, env } = await runWatchTests(t, 65, 2);
+  assert.equal(result.code, 65);
+  assert.ok(await readFile(env.WHIM_TEST_SUMMARY_ARGS, 'utf8'));
+});
+
+test('successful Watch UI tests do not request failure diagnostics', async t => {
+  const { result, env } = await runWatchTests(t, 0);
+  assert.equal(result.code, 0);
+  await assert.rejects(readFile(env.WHIM_TEST_SUMMARY_ARGS), { code: 'ENOENT' });
 });
