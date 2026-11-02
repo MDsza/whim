@@ -363,6 +363,42 @@ final class WhimServiceIntegrationTests: XCTestCase {
         XCTAssertEqual(recovered?.requiresReview, true)
     }
 
+    // Break: enumerating existing audio keeps the new recording behind startup preparation.
+    func testStartupAndCaptureFinishWhileRecoveryInventoryIsSuspended() async throws {
+        let harness = try WhimFacadeHarness()
+        defer { harness.remove() }
+        let entered = expectation(description: "Recovery inventory entered")
+        let files = SuspendedRecoveryFiles(base: harness.files, entered: entered, blockInventory: true)
+        let client = harness.makeService(recoveryFiles: files)
+        let maintenance = Task { try await client.maintain() }
+        await fulfillment(of: [entered], timeout: 2)
+        let captured = expectation(description: "Startup, Record and Stop finish before inventory")
+        let capture = Task {
+            _ = try await client.startup()
+            _ = try await client.startRecording(source: .iphone)
+            let note = try await client.stopRecording()
+            XCTAssertEqual(note?.requiresReview, false)
+            captured.fulfill()
+        }
+        await fulfillment(of: [captured], timeout: 1)
+        files.release()
+        try await capture.value
+        try await maintenance.value
+    }
+
+    func testRecoveryInventoryTakenDuringCaptureCannotRecoverTheLiveWriter() async throws {
+        let harness = try WhimFacadeHarness()
+        defer { harness.remove() }
+        let client = harness.makeService()
+        let recording = try await client.startRecording(source: .iphone)
+        try await client.maintain()
+        let active = try await client.activeRecording()
+        XCTAssertEqual(active?.sessionID, recording.sessionID)
+        let saved = try await client.stopRecording()
+        XCTAssertEqual(saved?.id.rawValue.uuidString.lowercased(), recording.noteID)
+        XCTAssertEqual(saved?.requiresReview, false)
+    }
+
     func testSlowManualRetryDoesNotBlockStoppingAnActiveRecording() async throws {
         let harness = try WhimFacadeHarness(responses: [.init(statusCode: 400), .init(statusCode: 204)])
         defer { harness.remove() }
@@ -1480,21 +1516,28 @@ private final class SuspendedRecoveryFiles: AudioFileManaging, @unchecked Sendab
     private let condition = NSCondition()
     private var released = false
     let failFinalization: Bool
-    init(base: AudioFileStore, entered: XCTestExpectation, failFinalization: Bool = false) {
-        self.base = base; self.entered = entered; self.failFinalization = failFinalization
+    let blockInventory: Bool
+    init(base: AudioFileStore, entered: XCTestExpectation, failFinalization: Bool = false, blockInventory: Bool = false) {
+        self.base = base; self.entered = entered; self.failFinalization = failFinalization; self.blockInventory = blockInventory
     }
     func release() { condition.lock(); released = true; condition.broadcast(); condition.unlock() }
     func playablePartial(sessionID: RecordingSessionID) throws -> PartialAudio? {
+        if !blockInventory { wait() }
+        return try base.playablePartial(sessionID: sessionID)
+    }
+    private func wait() {
         condition.lock()
         entered.fulfill()
         while !released { condition.wait() }
         condition.unlock()
-        return try base.playablePartial(sessionID: sessionID)
     }
     func claimOwnership(noteID: NoteID) throws -> AudioFileOwnership? { try base.claimOwnership(noteID: noteID) }
     func deleteTemporary(sessionID: RecordingSessionID) throws { try base.deleteTemporary(sessionID: sessionID) }
     func audioError(at url: URL) -> LocalAudioError? { base.audioError(at: url) }
-    func durableNoteIDs() throws -> [NoteID] { try base.durableNoteIDs() }
+    func durableNoteIDs() throws -> [NoteID] {
+        if blockInventory { wait() }
+        return try base.durableNoteIDs()
+    }
     func durableAudio(noteID: NoteID) throws -> FinalizedAudio? { try base.durableAudio(noteID: noteID) }
     func audioURL(for id: NoteID) -> URL { base.audioURL(for: id) }
     func temporaryURL(for id: RecordingSessionID) throws -> URL { try base.temporaryURL(for: id) }

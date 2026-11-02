@@ -52,7 +52,7 @@ public actor WhimService: WhimClient {
     private var launchTask: Task<Void, Error>?
     private var maintenanceGeneration = 0
     private var maintenancePaused = false
-    private var preparationTask: Task<RecoveryScanner.Inventory, Error>?
+    private var preparationTask: Task<Void, Error>?
     private var recordingEventTask: Task<Void, Never>?
     private var deliveryEventTask: Task<Void, Never>?
     private struct Workflow: Sendable { let token: UUID; let task: Task<Void, Never> }
@@ -102,8 +102,8 @@ public actor WhimService: WhimClient {
         complicationObservation = ComplicationPublisher(client: self, store: store, reload: reload).observe()
     }
 
-    /// Only metadata enumeration and pending destructive reset precede capture.
-    private func prepareCapture() async throws -> RecoveryScanner.Inventory {
+    /// Only event wiring and a pending destructive reset precede capture.
+    private func prepareCapture() async throws {
         if maintenancePaused { await beginCommand(); endCommand() }
         if let preparationTask { return try await preparationTask.value }
         let task = Task {
@@ -116,7 +116,6 @@ public actor WhimService: WhimClient {
                 await self.onboarding.reset()
                 self.publish(.notesReset)
             }
-            return try await self.recovery.inventory()
         }
         preparationTask = task
         do { return try await task.value }
@@ -125,7 +124,7 @@ public actor WhimService: WhimClient {
 
     public func startup() async throws -> StartupProjection {
         async let microphone = permissions.status(.microphone)
-        _ = try await prepareCapture()
+        try await prepareCapture()
         async let completed = onboarding.isComplete()
         let active = await recording.snapshot().map(RecordingProjection.init)
         return await StartupProjection(onboardingCompleted: completed, microphone: microphone, recording: active)
@@ -190,13 +189,14 @@ public actor WhimService: WhimClient {
         if maintenancePaused { await beginCommand(); endCommand() }
         if let launchTask { return try await launchTask.value }
         let beforePreparation = maintenanceGeneration
-        let inventory = try await prepareCapture()
+        try await prepareCapture()
         if maintenancePaused || beforePreparation != maintenanceGeneration { return try await launch() }
         if let launchTask { return try await launchTask.value }
         let generation = maintenanceGeneration
         let task = Task {
             // Replay old peer mutations before validation; reset was handled during preparation.
             try await self.peer?.recoverPreparedState()
+            let inventory = try await self.recovery.inventory()
             try await self.recovery.scan(inventory)
             try await self.resumeEligibleNotes()
             for note in try await self.store.listNotes(filter: .all) { try await self.peer?.queueNote(note.id) }
@@ -225,7 +225,7 @@ public actor WhimService: WhimClient {
         if case .message(let envelope) = event, case .reset = envelope.payload { destructive = true }
         else { destructive = false }
         if destructive {
-            _ = try await prepareCapture()
+            try await prepareCapture()
             await beginCommand()
             maintenancePaused = true
             await cancelMaintenance()
@@ -322,7 +322,7 @@ public actor WhimService: WhimClient {
     }
 
     public func startRecording(source: CaptureSource) async throws -> RecordingProjection {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         let permission = await permissions.status(.microphone)
         guard permission == .granted || permission == .unavailable else { throw WhimServiceError.permissionDenied }
         await playback.stop()
@@ -332,36 +332,36 @@ public actor WhimService: WhimClient {
     }
 
     public func activeRecording() async throws -> RecordingProjection? {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         return await recording.snapshot().map(RecordingProjection.init)
     }
 
     public func stopRecording() async throws -> NoteProjection? {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         guard let finalized = try await recording.stop() else { return nil }
         handleFinalized(finalized)
         return NoteProjection(note: finalized)
     }
 
     public func discardRecording() async throws {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         try await recording.discard(); publish(.recordingDiscarded)
     }
 
     public func listNotes(filter: NoteFilter) async throws -> [NoteProjection] {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         return try await store.listNotes(filter: filter)
     }
 
     public func note(id: NoteID) async throws -> NoteDetailProjection? {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         guard let note = try await store.note(id: id) else { return nil }
         let attempts = try await store.deliveryAttempts(noteID: id)
         return NoteDetailProjection(note: note, hasLocalAudio: files.audioError(at: note.audioURL) == nil, deliveryAttempts: attempts)
     }
 
     public func webhookErrors() async throws -> [WebhookErrorProjection] {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         var errors = try await store.configurationTestErrors()
         for summary in try await store.listNotes(filter: .all) {
             guard let note = try await store.note(id: summary.id) else { continue }
@@ -371,7 +371,7 @@ public actor WhimService: WhimClient {
     }
 
     public func retry(noteID: NoteID) async throws {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         if try await retryPendingAudio(noteID) { return }
         try await runManualDelivery(noteID: noteID, recovered: false)
     }
@@ -437,7 +437,7 @@ public actor WhimService: WhimClient {
     }
 
     public func delete(noteID: NoteID) async throws {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         await beginCommand()
         maintenancePaused = true
         defer { maintenancePaused = false; endCommand() }
@@ -473,7 +473,7 @@ public actor WhimService: WhimClient {
     }
 
     public func testWebhook() async throws -> ConfigurationTestResult {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         guard let revision = try await store.latestConfigurationRevision() else {
             throw ConfigurationTestError.missingConfiguration
         }
@@ -493,7 +493,7 @@ public actor WhimService: WhimClient {
     }
 
     public func settings() async throws -> SettingsProjection {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         async let microphone = permissions.status(.microphone)
         async let speech = permissions.status(.speech)
         async let notifications = permissions.status(.notifications)
@@ -511,7 +511,7 @@ public actor WhimService: WhimClient {
     }
 
     public func completeOnboarding() async throws {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         await onboarding.complete()
     }
 
@@ -524,7 +524,7 @@ public actor WhimService: WhimClient {
     public func openSystemSettings() async throws { try await permissions.openSettings() }
 
     public func waveform(noteID: NoteID) async throws -> AudioWaveform {
-        _ = try await prepareCapture()
+        try await prepareCapture()
         guard let note = try await store.note(id: noteID), note.localError == nil,
               files.audioError(at: note.audioURL) == nil else { return .unavailable }
         do {
@@ -540,7 +540,7 @@ public actor WhimService: WhimClient {
     }
 
     public func playNote(_ id: NoteID) async throws -> PlaybackProjection {
-        _ = try await prepareCapture(); await beginCommand(); defer { endCommand() }
+        try await prepareCapture(); await beginCommand(); defer { endCommand() }
         guard await recording.snapshot() == nil else { throw WhimServiceError.recordingActive }
         guard let note = try await store.note(id: id), note.localError == nil,
               files.audioError(at: note.audioURL) == nil else { throw WhimServiceError.audioUnavailable }

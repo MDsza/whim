@@ -104,6 +104,10 @@ Active and unsent files use data protection compatible with Lock Screen capture 
 
 ### iPhone
 
+Updated by the user on 2026-11-02: after onboarding, the first rendered home accepts Record immediately, including while service construction or initial checks are unfinished. The request starts capture as soon as the essential recording prerequisites succeed. Initial status projection, recovery inventory, old-audio validation, history, optional permissions, settings, and synchronization do not gate Record or Stop. Opening the app alone does not start capture.
+
+A capture-blocking condition discovered after recording starts stops the Recording Session, preserves playable audio through normal finalization, and tells the user why it stopped. Failed finalization retains recoverable audio and a visible local error. Unrelated auxiliary failures do not stop capture. Microphone authorization, usable storage, pending destructive reset coordination, durable session creation, and required Live Activity startup still precede actual hardware capture.
+
 1. An invocation asks `WhimCore` to create a Recording Session and temporary audio file.
 2. Whim starts the required Live Activity and activates a native recording session.
 3. When supported and authorized, on-device transcription starts concurrently.

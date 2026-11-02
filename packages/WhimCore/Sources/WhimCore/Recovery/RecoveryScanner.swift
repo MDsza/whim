@@ -1,6 +1,6 @@
 import Foundation
 
-/// Call at cold startup after the recording adapter has established that no writer is active.
+/// Recovers prior audio while ownership locks exclude any active writer.
 public struct RecoveryScanner: Sendable {
     private let store: any WhimStore
     private let files: any AudioFileManaging
@@ -19,7 +19,8 @@ public struct RecoveryScanner: Sendable {
         let sessions: [RecordingSession]
     }
 
-    /// Metadata only. Freeze the candidate set before admitting new capture.
+    /// Metadata only. Capture may proceed while this candidate set is collected.
+    /// Scanning claims ownership and rechecks persisted state before recovering each candidate.
     public func inventory() async throws -> Inventory {
         let deletions = try await store.deletions()
         let sessions = try await store.recordingSessions()

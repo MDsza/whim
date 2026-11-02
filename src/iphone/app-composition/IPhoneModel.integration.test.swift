@@ -3,6 +3,74 @@ import WhimCore
 @testable import WhimIPhone
 
 @MainActor final class IPhoneModelIntegrationTests: XCTestCase {
+    func testRecordAndStopFinishBeforeInitialStartupProjection() async throws {
+        let harness = try WhimFacadeHarness()
+        defer { harness.remove() }
+        let onboarding = SuspendedPresentationOnboarding()
+        let model = IPhoneModel(client: harness.makeService(permissions: GrantedPermissions(), onboarding: onboarding),
+            onboardingCompletedHint: true)
+        let starting = Task { await model.start() }
+        await onboarding.waitUntilRead()
+        XCTAssertTrue(model.captureReady, "Record is available before initial checks finish")
+        let finished = expectation(description: "Record and Stop finish without joining startup")
+        let capture = Task {
+            await model.startRecording()
+            XCTAssertNotNil(model.recording)
+            XCTAssertFalse(model.isRecordingPending)
+            await model.stopRecording()
+            XCTAssertNil(model.recording)
+            XCTAssertEqual(model.notes.count, 1)
+            finished.fulfill()
+        }
+        await fulfillment(of: [finished], timeout: 1)
+        await onboarding.release()
+        await capture.value
+        await starting.value
+        model.stop()
+    }
+
+    func testStorageFullDiscoveredAfterStartStopsAndPreservesRecording() async throws {
+        let harness = try WhimFacadeHarness()
+        defer { harness.remove() }
+        let old = RecordingSession(id: RecordingSessionID(), noteID: NoteID(), createdAt: Date(), source: .iphone)
+        try await harness.store.saveRecordingSession(old)
+        try writeAudioFixture(to: harness.files.temporaryURL(for: old.id))
+        let entered = expectation(description: "Deferred recovery entered")
+        let gate = RecoveryClaimGate(entered: entered, cancelled: XCTestExpectation(description: "Unused cancellation"))
+        let failure = OneStorageFailure()
+        let client = harness.makeService(permissions: GrantedPermissions(),
+            recoveryFiles: FailingRecoveryOwnership(base: harness.files, beforeClaim: {
+                try gate.wait()
+                try failure.check()
+            }))
+        let model = IPhoneModel(client: client)
+        await model.start()
+        await fulfillment(of: [entered], timeout: 1)
+        await model.startRecording()
+        let active = try XCTUnwrap(model.recording)
+        gate.release()
+        for _ in 0..<200 where model.maintenanceError == nil || model.recording != nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNil(model.recording, "A blocking condition discovered later stops capture")
+        let serviceRecording = try await client.activeRecording()
+        XCTAssertNil(serviceRecording)
+        let saved = try XCTUnwrap(model.notes.first { $0.id.rawValue.uuidString.lowercased() == active.noteID })
+        XCTAssertTrue(saved.hasLocalAudio)
+        XCTAssertEqual(model.visibleFailure?.action, .storageInstructions)
+        XCTAssertTrue(model.feedback.contains("Recording stopped"))
+        await model.retryVisibleFailure()
+        XCTAssertNil(model.maintenanceError)
+        _ = try await CaptureEntryService(client: client, source: .iphone).record()
+        for _ in 0..<100 where model.recording == nil { try await Task.sleep(for: .milliseconds(5)) }
+        _ = try await client.stopRecording()
+        for _ in 0..<100 where model.recording != nil || model.feedback != "Note saved" {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(model.feedback, "Note saved", "A later Shortcut recording must not inherit the earlier stop reason")
+        model.stop()
+    }
+
     func testRepeatedSystemRecordKeepsElapsedTime() async throws {
         let harness = try WhimFacadeHarness()
         defer { harness.remove() }
@@ -755,6 +823,34 @@ actor GrantedPermissions: PermissionAdapter {
             XCTAssertTrue(playback.isPlaying)
             await model.client.stopPlayback()
         }
+    }
+}
+
+private actor SuspendedPresentationOnboarding: OnboardingStoring {
+    private var released = false
+    private var reads: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func isComplete() async -> Bool {
+        if !released {
+            await withCheckedContinuation { reads.append($0); waiters.forEach { $0.resume() }; waiters = [] }
+        }
+        return true
+    }
+    func waitUntilRead() async {
+        if !reads.isEmpty { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func release() { released = true; reads.forEach { $0.resume() }; reads = [] }
+    func complete() {}
+    func reset() {}
+}
+
+private final class OneStorageFailure: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending = true
+    func check() throws {
+        let fails = lock.withLock { let result = pending; pending = false; return result }
+        if fails { throw POSIXError(.ENOSPC) }
     }
 }
 
