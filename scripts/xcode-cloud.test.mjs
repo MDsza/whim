@@ -148,7 +148,7 @@ async function runWatchTests(t, testStatus, summaryStatus = 0) {
   await mkdir(bin);
   async function command(name, source) {
     const path = join(bin, name);
-    await writeFile(path, `#!${process.execPath}\n${source}`);
+    await writeFile(path, `#!/usr/bin/env node\n${source}`);
     await chmod(path, 0o755);
   }
   // Mock only the native codec/Xcode process boundaries. The runner and its
@@ -182,7 +182,10 @@ async function runWatchTests(t, testStatus, summaryStatus = 0) {
     result = { code: 0, ...await execute('bash', [new URL('./test-watch-e2e.sh', import.meta.url).pathname],
       { env, timeout: 15_000 }) };
   } catch (error) { result = error; }
-  return { result, env, args: JSON.parse(await readFile(env.WHIM_TEST_XCODE_ARGS, 'utf8')) };
+  const args = await readFile(env.WHIM_TEST_XCODE_ARGS, 'utf8').catch(error => {
+    throw new Error(`Watch runner did not reach xcodebuild (exit ${result.code}): ${result.stderr}`, { cause: error });
+  });
+  return { result, env, args: JSON.parse(args) };
 }
 
 test('failed Watch UI tests expose native assertion details and retain the failing exit status', async t => {
