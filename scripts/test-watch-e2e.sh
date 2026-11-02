@@ -38,10 +38,24 @@ NODE
 )"
 export TEST_RUNNER_WHIM_WATCH_WEBHOOK_URL="http://127.0.0.1:$whim_webhook_port"
 
-xcodebuild test -quiet \
+mkdir -p "$whim_derived_data/Logs/Test"
+whim_result_directory="$(mktemp -d "$whim_derived_data/Logs/Test/watch-e2e.XXXXXX")"
+whim_result_bundle="$whim_result_directory/WhimWatchUITests.xcresult"
+
+if xcodebuild test -quiet \
   -workspace "$whim_root/ios/Whim.xcworkspace" \
   -scheme WhimWatchUITests \
   "${whim_xcode_build_locations[@]}" \
+  -resultBundlePath "$whim_result_bundle" \
   -only-testing:"${WHIM_WATCH_E2E_TEST:-WhimWatchUITests}" \
   -destination "id=${WHIM_WATCH_SIMULATOR_UDID}" \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-; then
+  exit 0
+else
+  whim_test_status=$?
+  # Cloud retains the custom-script output, but not necessarily this result
+  # bundle. Quiet xcodebuild names failed tests without their assertion details.
+  echo "Watch UI failure details from $whim_result_bundle:"
+  xcrun xcresulttool get test-results summary --path "$whim_result_bundle" || true
+  exit "$whim_test_status"
+fi
