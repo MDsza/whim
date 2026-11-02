@@ -125,6 +125,27 @@ final class RecordingServiceTests: XCTestCase {
         XCTAssertTrue(sessions.isEmpty)
     }
 
+    func testStartCanRetryAfterTheSuspendedSaveFails() async throws {
+        let harness = RecordingHarness()
+        await harness.store.suspendSessionSave(failing: true)
+        let first = Task { try await harness.service.start(source: .iphone) }
+        await harness.store.waitUntilSessionSaveStarts()
+        await harness.store.releaseSessionSave()
+        do {
+            _ = try await first.value
+            XCTFail("The suspended save must fail")
+        } catch RecordingTestError.activationFailed {}
+
+        // A caller scheduled after the first failure is a retry. The store's
+        // persistent failure must return without waiting for a second release.
+        do {
+            _ = try await harness.service.start(source: .iphone)
+            XCTFail("The retry must report the storage failure")
+        } catch RecordingTestError.activationFailed {}
+        let startCount = await harness.recorder.startCount
+        XCTAssertEqual(startCount, 0)
+    }
+
     // Break: Stop races past an in-flight start and reports no Note even though capture activates afterward.
     func testStopWaitsForInFlightStartThenFinalizesIt() async throws {
         let harness = RecordingHarness()
@@ -507,12 +528,15 @@ private actor RecordingStoreFake: WhimStore {
 
     func saveRecordingSession(_ session: RecordingSession) async throws {
         if shouldSuspendSave {
-            saveHasStarted = true
-            saveStartedWaiter?.resume()
-            saveStartedWaiter = nil
-            await withCheckedContinuation { saveReleaseWaiter = $0 }
-            if suspendedSaveFails { throw RecordingTestError.activationFailed }
+            shouldSuspendSave = false
+            await withCheckedContinuation {
+                saveReleaseWaiter = $0
+                saveHasStarted = true
+                saveStartedWaiter?.resume()
+                saveStartedWaiter = nil
+            }
         }
+        if suspendedSaveFails { throw RecordingTestError.activationFailed }
         savedSessions.append(session)
     }
     func recordingSessions() async throws -> [RecordingSession] { savedSessions }
