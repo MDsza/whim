@@ -130,6 +130,7 @@ struct WatchCaptureView: View {
                     .frame(width: controlDiameter, height: controlDiameter)
                     .watchGlass(in: Circle())
                     .modifier(WatchCaptureGlassIdentity(id: "capture", namespace: glassNamespace))
+                    .contentShape([.interaction, .accessibility], Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Stop recording")
@@ -144,6 +145,7 @@ struct WatchCaptureView: View {
                     .frame(width: controlDiameter, height: controlDiameter)
                     .watchGlass(in: Circle())
                     .modifier(WatchCaptureGlassIdentity(id: "capture", namespace: glassNamespace))
+                    .contentShape([.interaction, .accessibility], Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Record a Whim")

@@ -11,32 +11,37 @@ struct WatchRootView: View {
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geometry in
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        WatchCaptureView(model: model)
-                            .frame(height: geometry.size.height)
-                            .id("capture")
+            GeometryReader { safeGeometry in
+                GeometryReader { geometry in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            WatchCaptureView(model: model)
+                                .frame(height: geometry.size.height)
+                                .id("capture")
 
-                        VStack(spacing: 14) {
-                            WatchRecentNotesView(model: model)
-                            WebhookStatusView(available: model.configurationAvailable,
-                                synchronization: model.synchronization)
+                            VStack(spacing: 14) {
+                                WatchRecentNotesView(model: model)
+                                WebhookStatusView(available: model.configurationAvailable,
+                                    synchronization: model.synchronization)
+                            }
+                            .padding(.horizontal, 8)
+                            // Measure before ignoring the safe area so history clears
+                            // the system toolbar as its height changes across watchOS.
+                            .padding(.top, safeGeometry.frame(in: .global).minY
+                                - geometry.frame(in: .global).minY + 44)
+                            .padding(.bottom, 20)
+                            .frame(minHeight: geometry.size.height, alignment: .top)
+                            .id("previous-notes")
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.top, 90)
-                        .padding(.bottom, 20)
-                        .frame(minHeight: geometry.size.height, alignment: .top)
-                        .id("previous-notes")
+                        .scrollTargetLayout()
                     }
-                    .scrollTargetLayout()
+                    .scrollTargetBehavior(.paging)
+                    .scrollPosition(id: visiblePage)
+                    .scrollBounceBehavior(.always)
+                    .background(Color.black)
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: visiblePage)
-                .scrollBounceBehavior(.always)
-                .background(Color.black)
+                .ignoresSafeArea()
             }
-            .ignoresSafeArea()
             .navigationTitle(model.showsRecent ? "Previous Notes" : "")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(model.showsRecent ? .visible : .hidden,

@@ -11,12 +11,13 @@ final class WatchRecordingUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["watch-stop"].waitForExistence(timeout: 15))
 
-        app.buttons["watch-stop"].tap()
+        // Exercise the glass control outside the central symbol's bounds.
+        app.buttons["watch-stop"].coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
         let record = app.buttons["watch-record"]
         XCTAssertTrue(record.waitForExistence(timeout: 10))
         XCTAssertTrue(record.isHittable)
 
-        record.tap()
+        record.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5)).tap()
         let stop = app.buttons["watch-stop"]
         XCTAssertTrue(stop.waitForExistence(timeout: 10))
         XCTAssertTrue(stop.isHittable)
@@ -66,6 +67,8 @@ final class WatchRecordingUITests: XCTestCase {
         XCTAssertLessThanOrEqual(app.staticTexts["watch-elapsed"].frame.maxY, waveform.frame.minY)
         XCTAssertLessThanOrEqual(waveform.frame.maxY, app.buttons["watch-stop"].frame.minY)
         let controlFrame = app.buttons["watch-stop"].frame
+        XCTAssertEqual(controlFrame.width, 72)
+        XCTAssertEqual(controlFrame.height, 72)
         let headerBottom = app.staticTexts["watch-elapsed"].frame.maxY
         let historyHeading = app.navigationBars["Previous Notes"]
         XCTAssertTrue(!historyHeading.exists
