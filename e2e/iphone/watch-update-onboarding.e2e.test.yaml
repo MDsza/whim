@@ -7,17 +7,13 @@ appId: app.whim.ios
       -WhimFixtureWatchUpdate: true
     permissions:
       all: allow
-# Users from older releases may still have the previous setup guide pending.
-- extendedWaitUntil:
-    visible:
-      id: quick-capture-setup
-    timeout: 60000
-- tapOn: Skip for now
 - extendedWaitUntil:
     visible:
       id: watch-recording-update
     timeout: 60000
 - assertVisible: 3 seconds
+- waitForAnimationToEnd
+- takeScreenshot: watch-update-defaults
 - assertVisible:
     id: watch-silence-duration
     enabled: true
@@ -60,11 +56,6 @@ appId: app.whim.ios
       -WhimFixtureWatchUpdate: true
     permissions:
       all: allow
-- extendedWaitUntil:
-    visible:
-      id: quick-capture-setup
-    timeout: 60000
-- tapOn: Skip for now
 - extendedWaitUntil:
     visible:
       id: watch-recording-update

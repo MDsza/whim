@@ -6,7 +6,7 @@ enum SettingsSection: String, CaseIterable, Hashable {
     case webhook, webhookErrors = "webhook-errors", audio, titles, permissions, watch, quickCapture = "quick-capture"
     var title: String {
         switch self {
-        case .quickCapture: "Set up action button"
+        case .quickCapture: "Configure action button"
         case .webhook: "Webhook"
         case .webhookErrors: "Webhook errors"
         case .audio: "Audio retention"
@@ -39,21 +39,16 @@ struct PreferencesView: View {
     var body: some View {
         List {
             Section {
-                ForEach(SettingsSection.allCases.filter { $0 != .webhookErrors }, id: \.self) { section in
-                    NavigationLink(value: IPhoneRoute.settingsSection(section)) {
-                        WhimLabeledValue {
-                            Label(section.title, systemImage: section.symbol)
-                        } value: {
-                            if !summary(section).isEmpty {
-                                Text(summary(section)).foregroundStyle(.secondary)
-                                    .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
-                            }
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(section.title)
-                        .accessibilityValue(summary(section))
-                    }
-                    .accessibilityIdentifier("settings-\(section.rawValue)")
+                ForEach(SettingsSection.allCases.filter {
+                    $0 != .webhookErrors && $0 != .quickCapture
+                }, id: \.self) { section in
+                    settingsLink(section)
+                }
+            }
+            // Control Center/Lock Screen and Watch complication setup are hidden for now.
+            if QuickCaptureGuide.currentRoute == .actionButton {
+                Section("Shortcuts") {
+                    settingsLink(.quickCapture)
                 }
             }
             Section {
@@ -80,6 +75,22 @@ struct PreferencesView: View {
         } message: {
             Text("This removes all local audio, Notes, history, webhook configuration and credentials. It cannot revoke delivery accepted by your server or erase a disconnected Watch immediately.")
         }
+    }
+    private func settingsLink(_ section: SettingsSection) -> some View {
+        NavigationLink(value: IPhoneRoute.settingsSection(section)) {
+            WhimLabeledValue {
+                Label(section.title, systemImage: section.symbol)
+            } value: {
+                if !summary(section).isEmpty {
+                    Text(summary(section)).foregroundStyle(.secondary)
+                        .lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(section.title)
+            .accessibilityValue(summary(section))
+        }
+        .accessibilityIdentifier("settings-\(section.rawValue)")
     }
     private func summary(_ section: SettingsSection) -> String {
         switch section {
@@ -146,17 +157,10 @@ struct SettingsSectionView: View {
             ForEach(errorLog.entries) { entry in webhookError(entry) }
             footnote("Failed deliveries and configuration tests, with secrets redacted. Delivery entries are removed with their Note; test entries are cleared by Reset Whim.")
         case .audio:
-            WhimLabeledValue {
-                Text("Keep audio after delivery")
-            } value: {
-                Picker("Keep audio", selection: $editor.retentionPolicy) {
-                    ForEach(retentionChoices, id: \.0) { policy, label in Text(label).tag(policy) }
-                }
-                .pickerStyle(.menu).labelsHidden().accessibilityIdentifier("retention-picker")
-            }
+            AudioRetentionControl(editor: editor)
             footnote("Unsent and recovered Notes are always kept until you delete them. Timeline metadata remains after audio expires.")
         case .titles:
-            Toggle("Transcription", isOn: $editor.transcriptionEnabled).accessibilityLabel("Transcription enabled")
+            OnDeviceTitlesControl(editor: editor)
             footnote("Only on-device recognition is used. No full transcript is stored.")
             VStack(alignment: .leading, spacing: WhimSpacing.field) {
                 Text("Transcription language").font(.subheadline).foregroundStyle(.secondary)
@@ -177,8 +181,6 @@ struct SettingsSectionView: View {
             Text(watchRecordingSynchronization)
                 .font(.footnote).foregroundStyle(.secondary)
                 .accessibilityIdentifier("watch-recording-sync-status")
-            Divider()
-            QuickCaptureSetupView(isWatch: true)
             Divider()
             Text("Watch synchronization \(settings.watch.availability).")
             footnote("Last synchronized: \(settings.watch.lastSynchronizedAt.map(TimelineFormat.date) ?? "Not yet synchronized")")
@@ -287,5 +289,27 @@ struct WatchRecordingControls: View {
                 .accessibilityIdentifier("watch-silence-duration")
             }
         }
+    }
+}
+/// Shared by Settings and release announcements so both edit the same preference draft.
+struct AudioRetentionControl: View {
+    @Bindable var editor: SettingsEditor
+    var body: some View {
+        WhimLabeledValue {
+            Text("Keep audio after delivery")
+        } value: {
+            Picker("Keep audio", selection: $editor.retentionPolicy) {
+                ForEach(retentionChoices, id: \.0) { policy, label in Text(label).tag(policy) }
+            }
+            .pickerStyle(.menu).labelsHidden().accessibilityIdentifier("retention-picker")
+        }
+    }
+}
+
+struct OnDeviceTitlesControl: View {
+    @Bindable var editor: SettingsEditor
+    var body: some View {
+        Toggle("Transcription", isOn: $editor.transcriptionEnabled)
+            .accessibilityLabel("Transcription enabled")
     }
 }

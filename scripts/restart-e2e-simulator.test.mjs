@@ -33,6 +33,7 @@ esac
     xcodebuild: `#!/bin/sh
 echo '[{"target":"whim","buildSettings":{"BUILD_DIR":"/fixture","PROJECT_TEMP_DIR":"/fixture/intermediates"}}]'
 `,
+    python3: '#!/bin/sh\nif [ \"$1\" = - ]; then exec /usr/bin/python3 \"$@\"; fi\nexit 0\n',
     afconvert: '#!/bin/sh\nexit 0\n',
     maestro: '#!/bin/sh\n[ -f "$WHIM_TEST_INSTALLED" ]\n',
   };
@@ -61,8 +62,7 @@ set -eu
 [ "$1" = simctl ] && [ "$3" = fixture-iphone ]
 case "$2" in
   shutdown) [ "$(cat "$WHIM_TEST_STATE")" = stale ]; printf shutdown > "$WHIM_TEST_STATE" ;;
-  boot) [ "$(cat "$WHIM_TEST_STATE")" = shutdown ]; printf booting > "$WHIM_TEST_STATE" ;;
-  bootstatus) [ "$4" = -b ]; [ "$(cat "$WHIM_TEST_STATE")" = booting ]; printf ready > "$WHIM_TEST_STATE"; echo Finished ;;
+  bootstatus) [ "$4" = -b ]; [ "$(cat "$WHIM_TEST_STATE")" = shutdown ]; printf ready > "$WHIM_TEST_STATE"; echo Finished ;;
   *) exit 9 ;;
 esac
 `);
@@ -75,6 +75,7 @@ esac
 
 for (const output of ['Status=3, isTerminal=YES\nData Migration Failed', 'Status=4, isTerminal=NO']) {
   test(`E2E startup rejects an unhealthy boot even when simctl exits zero: ${output}`, async t => {
+    const { spawnSync } = await import('node:child_process');
     const root = await mkdtemp(join(tmpdir(), 'whim-unhealthy-simulator-'));
     t.after(() => rm(root, { recursive: true, force: true }));
     const xcrun = join(root, 'xcrun');
@@ -88,19 +89,46 @@ for (const output of ['Status=3, isTerminal=YES\nData Migration Failed', 'Status
   });
 }
 
-for (const [output, healthy] of [
-  ['Unable to boot device in current state: Booted', true],
-  ['Simulator service unavailable', false],
+test('E2E startup accepts a simulator booted by another client after shutdown', async t => {
+  const { spawnSync } = await import('node:child_process');
+  const root = await mkdtemp(join(tmpdir(), 'whim-concurrent-simulator-boot-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const xcrun = join(root, 'xcrun');
+  await writeFile(xcrun, `#!/bin/sh
+case "$2" in
+  shutdown) exit 0 ;;
+  boot) echo 'Unable to boot device in current state: Booted' >&2; exit 149 ;;
+  bootstatus) [ "$4" = -b ]; echo 'Device already booted'; exit 0 ;;
+  *) exit 9 ;;
+esac
+`);
+  await chmod(xcrun, 0o755);
+  const result = spawnSync(process.execPath, [new URL('./restart-e2e-simulator.mjs', import.meta.url).pathname, 'fixture-iphone'], {
+    encoding: 'utf8', env: { ...process.env, PATH: `${root}:${process.env.PATH}` },
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
+for (const [message, succeeds] of [
+  ['Unable to shutdown device in current state: Shutdown', true],
+  ['Unable to shutdown device: CoreSimulator service unavailable', false],
 ]) {
-  test(`E2E startup validates a racing boot without hiding real boot errors: ${output}`, async t => {
-    const root = await mkdtemp(join(tmpdir(), 'whim-racing-simulator-'));
+  test(`E2E startup handles shutdown result: ${message}`, async t => {
+    const { spawnSync } = await import('node:child_process');
+    const root = await mkdtemp(join(tmpdir(), 'whim-shutdown-simulator-'));
     t.after(() => rm(root, { recursive: true, force: true }));
     const xcrun = join(root, 'xcrun');
-    await writeFile(xcrun, '#!/bin/sh\ncase "$2" in\nboot) printf "%s\\n" "$WHIM_TEST_BOOT_ERROR" >&2; exit 149 ;;\nbootstatus) echo "Device already booted" ;;\nesac\n');
+    await writeFile(xcrun, `#!/bin/sh
+case "$2" in
+  shutdown) echo "$WHIM_TEST_SHUTDOWN_ERROR" >&2; exit 149 ;;
+  bootstatus) echo Finished ;;
+  *) exit 9 ;;
+esac
+`);
     await chmod(xcrun, 0o755);
     const result = spawnSync(process.execPath, [new URL('./restart-e2e-simulator.mjs', import.meta.url).pathname, 'fixture-iphone'], {
-      encoding: 'utf8', env: { ...process.env, PATH: `${root}:${process.env.PATH}`, WHIM_TEST_BOOT_ERROR: output },
+      encoding: 'utf8', env: { ...process.env, PATH: `${root}:${process.env.PATH}`, WHIM_TEST_SHUTDOWN_ERROR: message },
     });
-    assert.equal(result.status === 0, healthy, result.stderr);
+    assert.equal(result.status === 0, succeeds, result.stderr);
   });
 }

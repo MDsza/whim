@@ -9,7 +9,6 @@ struct OnboardingView: View {
     @AppStorage("onboarding.v1.step", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var savedStep = 0
     @Binding private var setupAcknowledged: Bool
     @AppStorage("onboarding.quickCapture.v1.step", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var upgradeStep = 3
-    @Binding private var watchUpdateAcknowledged: Bool
     let setupOnly: Bool
     private var step: Int { QuickCaptureGuide.onboardingStep(saved: setupOnly ? upgradeStep : savedStep, setupOnly: setupOnly) }
     @State private var setupPage = 0
@@ -17,17 +16,15 @@ struct OnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
 
-    init(model: IPhoneModel, settings: SettingsProjection?, setupOnly: Bool = false,
-         setupAcknowledged: Binding<Bool> = .constant(false), watchUpdateAcknowledged: Binding<Bool> = .constant(false)) {
+    init(model: IPhoneModel, settings: SettingsProjection?, setupOnly: Bool = false, setupAcknowledged: Binding<Bool> = .constant(false)) {
         self._setupAcknowledged = setupAcknowledged
-        self._watchUpdateAcknowledged = watchUpdateAcknowledged
         self.setupOnly = setupOnly
         self.model = model; self.settings = settings
         _webhook = State(initialValue: WebhookEditor(client: model.client))
     }
 
     var body: some View {
-        OnboardingFrame(step: step, totalSteps: 4, back: step == 0 || (setupOnly && step == 3) || (step == 2 && model.startupState?.microphone == .notDetermined) ? nil : { move(to: step - 1) }) {
+        OnboardingFrame(step: step, back: step == 0 || (setupOnly && step == 3) || (step == 2 && model.startupState?.microphone == .notDetermined) ? nil : { move(to: step - 1) }) {
             Group {
                 switch step {
                 case 0: OnboardingWelcome()
@@ -56,7 +53,7 @@ struct OnboardingView: View {
                         }.buttonStyle(OnboardingPrimaryButtonStyle())
                     }
                     if model.startupState?.microphone == .granted {
-                        Button("Continue to setup") { complete(request: false) }
+                        Button(QuickCaptureGuide.currentRoute == nil ? "Continue" : "Continue to setup") { complete(request: false) }
                             .buttonStyle(OnboardingPrimaryButtonStyle())
                     } else {
                         Button("Continue") { complete(request: false) }
@@ -125,60 +122,24 @@ struct OnboardingView: View {
             await model.perform {
                 if request { _ = try await model.client.requestPermission(.microphone) }
             }
-            move(to: 3)
+            if QuickCaptureGuide.currentRoute == nil { finish() }
+            else { move(to: 3) }
         }
     }
     private func finish() {
         // Acknowledge while this view is mounted, before completion can replace it.
         setupAcknowledged = true
         guard !setupOnly else { return }
-        watchUpdateAcknowledged = true
         Task { await model.perform { try await model.client.completeOnboarding() } }
     }
 
 }
 
-struct WatchRecordingUpdateView: View {
-    @State private var update: WatchRecordingUpdate
-    let finished: () -> Void
-
-    init(client: any WhimClient, finished: @escaping () -> Void) {
-        _update = State(initialValue: WatchRecordingUpdate(client: client))
-        self.finished = finished
-    }
-
-    var body: some View {
-        OnboardingFrame(step: 0, totalSteps: 1) {
-            VStack(alignment: .leading, spacing: 32) {
-                OnboardingHeading(title: "Hands-free Notes on Apple Watch",
-                    detail: "After you speak, Whim can stop, save, and send your Note when it detects silence.")
-                WatchRecordingControls(autoStopEnabled: $update.autoStopEnabled,
-                    silenceDurationSeconds: $update.silenceDurationSeconds)
-                Text("You can change this any time in Settings → Apple Watch.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let error = update.error { WhimErrorText(message: error.message) }
-            }
-        } actions: {
-            Button {
-                Task { if await update.save() { finished() } }
-            } label: {
-                HStack {
-                    Text("Continue")
-                    if update.isPending { ProgressView() }
-                }
-            }.buttonStyle(OnboardingPrimaryButtonStyle())
-            Button("Not now", action: finished).buttonStyle(OnboardingSecondaryButtonStyle())
-        }
-        .disabled(update.isPending)
-        .accessibilityIdentifier("watch-recording-update")
-    }
-}
-
 /// Startup and the interactive welcome share their first frame.
 struct OnboardingFrame<Content: View, Actions: View>: View {
     let step: Int
-    var totalSteps: Int = 4
+    var totalSteps: Int = QuickCaptureGuide.currentRoute == nil ? 3 : 4
+    var showsProgress = true
     var back: (() -> Void)? = nil
     @ViewBuilder var content: Content
     @ViewBuilder var actions: Actions
@@ -217,15 +178,19 @@ struct OnboardingFrame<Content: View, Actions: View>: View {
                 }
                 Text("whim").font(.title2.weight(.semibold))
                 Spacer()
-                Text(String(format: "%02d / %02d", step + 1, totalSteps))
-                    .font(.caption.monospaced()).foregroundStyle(.secondary)
-                    .accessibilityLabel("Step \(step + 1) of \(totalSteps)")
-            }
-            HStack(spacing: 6) {
-                ForEach(0..<totalSteps, id: \.self) { index in
-                    Capsule().fill(.white.opacity(index <= step ? 0.85 : 0.15)).frame(height: 2)
+                if showsProgress {
+                    Text(String(format: "%02d / %02d", step + 1, totalSteps))
+                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .accessibilityLabel("Step \(step + 1) of \(totalSteps)")
                 }
-            }.accessibilityHidden(true)
+            }
+            if showsProgress {
+                HStack(spacing: 6) {
+                    ForEach(0..<totalSteps, id: \.self) { index in
+                        Capsule().fill(.white.opacity(index <= step ? 0.85 : 0.15)).frame(height: 2)
+                    }
+                }.accessibilityHidden(true)
+            }
         }.padding(.horizontal, WhimSpacing.page).padding(.top, 12).padding(.bottom, 8)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
@@ -241,7 +206,7 @@ struct OnboardingWelcome: View {
                 OnboardingBenefit(symbol: "lock", title: "Keep it yours",
                     detail: "Local storage. Your destination. You’re in control.")
                 OnboardingBenefit(symbol: "hand.tap", title: "Convenient",
-                    detail: "Assign the Action Button to Whim, or use its control in Control Center or on the Lock Screen.")
+                    detail: "Record in Whim, or assign it to your iPhone’s Action button when supported.")
                 OnboardingBenefit(symbol: "applewatch", title: "Apple Watch",
                     detail: "Use complications, or add Whim to the Smart Stack for hands-free operation.")
             }
@@ -264,7 +229,7 @@ struct OnboardingMicrophoneHeading: View {
     }
 }
 
-private struct OnboardingHeading: View {
+struct OnboardingHeading: View {
     let title: String
     let detail: String
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 38
@@ -303,7 +268,7 @@ private struct OnboardingBenefit: View {
     }
 }
 
-private struct OnboardingPrimaryButtonStyle: ButtonStyle {
+struct OnboardingPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.labelStyle(.titleOnly).font(.body.weight(.semibold)).multilineTextAlignment(.center)
@@ -314,7 +279,7 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-private struct OnboardingSecondaryButtonStyle: ButtonStyle {
+struct OnboardingSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
@@ -362,6 +327,9 @@ struct QuickCaptureSetupView: View {
         ]
     }
     var body: some View {
+        if isWatch || route != nil { guide }
+    }
+    private var guide: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack {
                 Text(isWatch ? "Apple Watch" : actionButton ? "Action button" : controlCenter ? "Control Center" : "Lock Screen")

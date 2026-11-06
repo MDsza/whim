@@ -280,9 +280,9 @@ Onboarding:
 1. Explain local storage and direct webhook delivery.
 2. Offer webhook configuration and test, with Skip available.
 3. Request microphone permission.
-4. Offer optional “Record from anywhere” guidance: Action-button Control automatically selected for known Action-button iPhone hardware, Lock Screen and Control Center controls otherwise, and Watch complication instructions for paired Watches, with the Watch guide available separately in Settings → Apple Watch even when pairing is not yet detected. The iPhone setup screen has only Skip for now as its exit; this advances to a separate Watch setup step when paired, otherwise completes onboarding. Watch setup has its own Skip for now exit. Each instruction reserves a media placeholder for a photo or short video. Leaving the app retains the setup step. The same guide is available from Settings. System assignments are performed by the user and are not reported as automatically verified.
+4. Stop finalizes AAC-LC mono audio in an `.m4a` container, creates the Note and Delivery, ends the Live Activity, and starts both v1 Steps.
 
-Existing users receive a one-time “Hands-free Notes on Apple Watch” update screen after prior onboarding is complete. It shows the same native toggle and 2–10-second slider as Settings → Apple Watch, initially enabled at 3 seconds. Opening it does not write settings. Continue saves the chosen Watch preferences through the existing facade, preserves other preferences, and dismisses only after a successful save; a failure keeps the draft available for retry. Not now dismisses without saving. Acknowledgement survives relaunch. Fresh onboarding acknowledges the notice without showing it, and an active Recording Session defers presentation until capture ends.
+The current release announcement is “Hands-free Notes on Apple Watch”, selected by the stable announcement ID `watch-silence-v1` in the update framework below. It shows the same native toggle and 2–10-second slider as Settings → Apple Watch, initially enabled at 3 seconds. Opening it does not write settings. Continue saves the chosen Watch preferences through the existing facade, preserves other preferences, and dismisses only after a successful save; a failure keeps the draft available for retry. Not now dismisses without saving. Acknowledgement survives relaunch. Fresh onboarding covers the announcement without showing it. Presentation is deferred during capture, recording startup, history, navigation, or inactive scenes.
 
 Speech and notification permissions are optional and managed from the Permissions page in Settings. When any permission is missing and the user has never visited that page, the idle iPhone capture screen shows one Liquid Glass “Review permissions” button below explanatory text beneath Settings, leaving the logo visible. The reminder area scrolls at large text sizes to keep the logo unobstructed. Opening the page through any route records the visit locally and removes the reminder across launches, even if no permission is granted. Resetting Whim clears that visit. Denied permissions are not repeatedly requested; Settings provides the relevant system-settings route.
 
@@ -466,12 +466,19 @@ V1 is complete only when:
 - App privacy disclosures match the implemented behavior: audio and titles go only to the configured user endpoint; Whim sends no diagnostics or telemetry elsewhere.
 - The product-owner-provided configuration-test audio asset is present and non-sensitive.
 
-Existing installations that completed original onboarding but have no quick-capture setup
-acknowledgement receive only phone setup. Continuing from its final page or skipping
-the preview persists acknowledgement. Saved Watch-step progress resumes at phone setup, and
-active recordings remain accessible before setup. New onboarding also writes this
-acknowledgement so setup does not repeat on the next launch.
+Existing installations receive deliberate release announcements in a sheet using the
+onboarding layout, with release-specific acknowledgement independent of app versions.
+The current announcement contains the Watch silence toggle and slider; quick-capture, title, and retention sections remain available for other release announcements. Fresh installations
+mark their installed release's announcement as covered before onboarding can finish,
+so completing onboarding and relaunching never shows that announcement. Continue or
+Not now (or Skip for now for other announcement content) acknowledges an announcement; optional settings controls save drafts only
+on Continue, and failed saves remain visible. Recording, history, navigation and inactive
+scenes defer presentation. See the [update onboarding design](2026-11-06-update-onboarding-design.md).
 
 Action Button setup uses bundled silent video demos: the capture preview and one combined setup step covering Controls and Record a Whim. Videos play once while visible and active, with a Play again control visible only when stopped that restarts from the beginning; Reduce Motion disables autoplay. Watch and Lock Screen guides retain media placeholders until footage is available.
 
 Onboarding currently has four steps. Webhook setup has one Continue to microphone action. Action Button setup has no Previous or Read again controls; its final page uses Continue instead of Skip for now. Apple Watch onboarding is hidden pending video production; its guide remains in Settings.
+
+Updated by the user on 2026-11-06: Lock Screen and Control Center onboarding guides are hidden for now, including their Settings entry. Action-button iPhones retain their four-step onboarding and setup guide. Other and unknown hardware use three steps and finish after microphone onboarding, with no quick-capture upgrade prompt. Saved hidden-guide progress resumes at the microphone step. This only changes guidance; the recording controls remain available.
+
+Settings groups shortcut setup separately from its general rows under “Shortcuts”. Its options are “Configure action button”, “Configure control center and lockscreen”, and “Configure Apple Watch complication”. Only the Action button option is currently visible, and only on iPhones with an Action button. The other two options and the complication guide embedded in Apple Watch settings remain hidden for now. Apple Watch synchronization status remains in the general settings. Hide the Shortcuts group when it has no visible options.
