@@ -213,6 +213,7 @@ public final class AVAudioRecorderAdapter: NSObject, AudioRecorder, @unchecked S
             return (hardware.elapsedTime, power, hardware.signal)
         }
         guard let sample else { return }
+        continuation.yield(.meter(elapsed: sample.0, peakPowerDBFS: sample.1))
         continuation.yield(.elapsed(sample.0))
         if let signal = sample.2 { continuation.yield(.signal(signal)) }
         else { continuation.yield(.peakPower(sample.1)) }

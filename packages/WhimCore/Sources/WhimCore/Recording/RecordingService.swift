@@ -66,6 +66,7 @@ public actor RecordingService {
     private var warningEmitted = false
     private var maximumStopRequested = false
     private var interruptionDuringActivation = false
+    private var silencePolicy: SilenceAutoStopPolicy?
 
     public init(
         recorder: any AudioRecorder,
@@ -100,10 +101,13 @@ public actor RecordingService {
     public func events() -> AsyncStream<RecordingServiceEvent> { serviceEvents }
     public func snapshot() -> RecordingSnapshot? { active ?? activating }
 
-    public func start(source: CaptureSource) async throws -> RecordingSnapshot {
+    public func start(source: CaptureSource, autoStop: WatchRecordingPreferences? = nil) async throws -> RecordingSnapshot {
         if let discardTask { try await discardTask.value }
         if let active { return active }
         if let startTask { return try await startTask.value }
+        try autoStop?.validate()
+        silencePolicy = source == .appleWatch && autoStop?.autoStopEnabled == true
+            ? autoStop.map { SilenceAutoStopPolicy(preferences: $0) } : nil
 
         #if DEBUG
         CaptureLatencyProbe.shared.begin()
@@ -153,6 +157,7 @@ public actor RecordingService {
             return snapshot
         } catch {
             activating = nil
+            silencePolicy = nil
             interruptionDuringActivation = false
             encoderCompletion = nil
             encoderFailure = nil
@@ -183,6 +188,7 @@ public actor RecordingService {
         if let finalizationTask { return try await finalizationTask.value }
         guard let snapshot = active else { return nil }
 
+        silencePolicy = nil
         let task = Task { try await self.finalize(snapshot, outcome: outcome) }
         finalizationTask = task
         do {
@@ -203,6 +209,7 @@ public actor RecordingService {
             return
         }
         guard let snapshot = active else { return }
+        silencePolicy = nil
         active = nil
         let task = Task { try await self.performDiscard(snapshot) }
         discardTask = task
@@ -247,6 +254,11 @@ public actor RecordingService {
     private func consume(_ event: RecordingEvent) {
         let captureExists = active != nil || activating != nil
         switch event {
+        case .meter(let elapsed, let power):
+            guard captureExists, silencePolicy?.consume(elapsed: elapsed, peakPowerDBFS: power) == true,
+                  let session = active ?? activating else { return }
+            silencePolicy = nil
+            Task { try? await self.stopAutomatically(sessionID: session.sessionID) }
         case .elapsed(let elapsed):
             guard captureExists else { return }
             serviceEventContinuation.yield(.elapsed(elapsed))
@@ -258,7 +270,9 @@ public actor RecordingService {
             }
             if elapsed >= RecordingLimits.maximumDuration.timeInterval, !maximumStopRequested {
                 maximumStopRequested = true
-                Task { try? await self.stop() }
+                if let session = active ?? activating {
+                    Task { try? await self.stopAutomatically(sessionID: session.sessionID) }
+                }
             }
         case .signal(let signal):
             guard captureExists else { return }
@@ -275,9 +289,11 @@ public actor RecordingService {
             serviceEventContinuation.yield(.peakPower(power))
         case .routeChanged:
             guard captureExists else { return }
+            silencePolicy?.invalidateTiming()
             serviceEventContinuation.yield(.routeChanged)
         case .interruption:
             guard captureExists else { return }
+            silencePolicy = nil
             if activating != nil {
                 interruptionDuringActivation = true
             } else {
@@ -299,6 +315,12 @@ public actor RecordingService {
     private func recorderEventsEnded() {
         recorderStreamEnded = true
         failEncoderWaiter(with: .eventStreamEnded)
+    }
+
+    private func stopAutomatically(sessionID: RecordingSessionID) async throws {
+        if let startTask { _ = try await startTask.value }
+        guard active?.sessionID == sessionID, discardTask == nil else { return }
+        _ = try await beginFinalization(outcome: .completed)
     }
 
     private func failEncoderWaiter(with error: RecordingServiceError) {

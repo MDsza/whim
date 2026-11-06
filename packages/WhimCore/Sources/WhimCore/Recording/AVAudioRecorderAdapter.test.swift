@@ -36,8 +36,12 @@ final class AVAudioRecorderAdapterTests: XCTestCase {
         guard updateMeterCount == 1 else { return }
         var iterator = events.makeAsyncIterator()
         var received: [RecordingEvent] = []
-        for _ in 0..<3 { if let event = await iterator.next() { received.append(event) } }
+        while let event = await iterator.next() {
+            received.append(event)
+            if case .encoderCompleted = event { break }
+        }
         XCTAssertEqual(received, [
+            .meter(elapsed: 0.05, peakPowerDBFS: -12),
             .elapsed(0.05),
             .peakPower(-12),
             .encoderCompleted(duration: 0.05, peakPowerDBFS: -12),
@@ -65,8 +69,12 @@ final class AVAudioRecorderAdapterTests: XCTestCase {
 
         var iterator = events.makeAsyncIterator()
         var received: [RecordingEvent] = []
-        for _ in 0..<3 { if let event = await iterator.next() { received.append(event) } }
+        while let event = await iterator.next() {
+            received.append(event)
+            if case .encoderCompleted = event { break }
+        }
         XCTAssertEqual(received, [
+            .meter(elapsed: 2, peakPowerDBFS: -8),
             .elapsed(2),
             .peakPower(-8),
             .encoderCompleted(duration: 2, peakPowerDBFS: -8),

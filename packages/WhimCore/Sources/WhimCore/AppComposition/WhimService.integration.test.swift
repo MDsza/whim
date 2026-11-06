@@ -4,6 +4,74 @@ import XCTest
 @testable import WhimCore
 
 final class WhimServiceIntegrationTests: XCTestCase {
+    // Break: iPhone trusts draft revision metadata or never publishes a saved offline choice.
+    func testPhoneWatchPreferencesAllocateRevisionAndPublishAfterReconnectionWithoutWebhook() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let transport = RetentionPeerTransport()
+        let peer = try ConnectivityMergeService(store: h.store, files: h.files, databaseURL: h.databaseURL,
+            root: h.root.appendingPathComponent("Peer"), device: .iphone, transport: transport, preferences: h.preferences)
+        let client = h.makeService(peer: peer)
+        try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: false,
+            transcriptionLocaleIdentifier: "es-ES",
+            watchRecording: .init(autoStopEnabled: false, silenceDurationSeconds: 10), watchRecordingRevision: 999))
+        let saved = try await client.settings().preferences
+        XCTAssertEqual(saved.watchRecordingRevision, 1, "Only the service allocates revisions")
+        transport.connect()
+        try await client.receivePeer(.activated)
+        let values = transport.states.compactMap { envelope -> WatchRecordingPreferencesTransfer? in
+            if case .watchRecordingPreferences(let value) = envelope.payload { return value }
+            return nil
+        }
+        XCTAssertEqual(values.last?.revision, 1)
+        XCTAssertEqual(values.last?.preferences, saved.watchRecording)
+        let settings = try await client.settings()
+        XCTAssertEqual(settings.watch.recordingPreferencesState, "pending")
+        XCTAssertNil(settings.webhook)
+        try await client.updatePreferences(.init(retentionPolicy: .oneDay, transcriptionEnabled: false,
+            transcriptionLocaleIdentifier: "es-ES", watchRecording: saved.watchRecording))
+        let unchanged = try await client.settings().preferences
+        XCTAssertEqual(unchanged.watchRecordingRevision, 1)
+    }
+
+    // Break: facade reset recovery erases settings the peer has just replayed in the new generation.
+    func testResetRecoveryKeepsReplayedWatchPreferencesBeforeCapture() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let peer = try ConnectivityMergeService(store: h.store, files: h.files, databaseURL: h.databaseURL,
+            root: h.root.appendingPathComponent("Peer"), device: .appleWatch, preferences: h.preferences)
+        let reset = try await peer.prepareReset()
+        let inbox = try ConnectivityInbox(databaseURL: h.databaseURL)
+        try inbox.capture(reset.encoded())
+        try inbox.capture(ConnectivityEnvelope(generation: reset.generation, payload: .watchRecordingPreferences(.init(
+            revision: 1, preferences: .init(autoStopEnabled: true, silenceDurationSeconds: 2)))).encoded())
+        let client = h.makeService(peer: peer)
+        _ = try await client.startup()
+        let settings = try await client.settings()
+        XCTAssertEqual(settings.preferences.watchRecording.silenceDurationSeconds, 2)
+        XCTAssertEqual(settings.preferences.watchRecordingRevision, 1)
+    }
+
+    // Break: facade entry points omit the Watch preference snapshot or bypass its Workflow.
+    func testWatchSilenceUsesNormalSaveAndDeliveryWithDefaultPreferences() async throws {
+        for status in [DeliveryStatus.sent, .queued, .setupRequired] {
+            let h = try WhimFacadeHarness()
+            defer { h.remove() }
+            if status != .setupRequired { _ = try await h.configuration.save(.init(endpoint: "https://example.com/whim")) }
+            let client = h.makeService(isConnected: { status != .queued })
+            let session = try await client.startRecording(source: .appleWatch)
+            for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+            for tick in 3...33 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+            let detail = try await waitForNote(client: client, status: status)
+            XCTAssertEqual(detail?.id, session.noteID)
+            let notes = try await client.listNotes(filter: .all)
+            XCTAssertEqual(notes.count, 1)
+            let active = try await client.activeRecording()
+            XCTAssertNil(active)
+            try await client.discardRecording()
+        }
+    }
+
     // Break: invalid Watch settings partially overwrite other saved preferences.
     func testInvalidWatchDurationDoesNotSaveAnyPreferences() async throws {
         let h = try WhimFacadeHarness()

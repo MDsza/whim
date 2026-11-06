@@ -4,6 +4,7 @@ import PackageDescription
 
 let productionSources = [
     "Preferences/WatchRecordingPreferences.swift",
+    "Recording/SilenceAutoStopPolicy.swift",
     "Maintenance/BackgroundScheduler.swift",
     "Maintenance/BGTaskSchedulerAdapter.swift",
     "Maintenance/WatchBackgroundScheduler.swift",

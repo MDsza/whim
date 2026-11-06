@@ -7,6 +7,8 @@ import WhimCore
     public let webhook: WebhookEditor
     public var retentionPolicy: RetentionPolicy
     public var transcriptionEnabled: Bool
+    public var watchAutoStopEnabled: Bool
+    public var watchSilenceDurationSeconds: Int
     /// Shows the device language when no override is saved.
     public var language: String
     public let deviceLanguage: String
@@ -22,6 +24,8 @@ import WhimCore
         webhook = WebhookEditor(client: client)
         retentionPolicy = preferences.retentionPolicy
         transcriptionEnabled = preferences.transcriptionEnabled
+        watchAutoStopEnabled = preferences.watchRecording.autoStopEnabled
+        watchSilenceDurationSeconds = preferences.watchRecording.silenceDurationSeconds
         language = preferences.transcriptionLocaleIdentifier ?? deviceLanguage
     }
 
@@ -46,6 +50,8 @@ import WhimCore
     private var preferences: PreferenceInput {
         let locale = language.trimmingCharacters(in: .whitespacesAndNewlines)
         return PreferenceInput(retentionPolicy: retentionPolicy, transcriptionEnabled: transcriptionEnabled,
-            transcriptionLocaleIdentifier: locale.isEmpty || locale == deviceLanguage ? nil : locale)
+            transcriptionLocaleIdentifier: locale.isEmpty || locale == deviceLanguage ? nil : locale,
+            watchRecording: .init(autoStopEnabled: watchAutoStopEnabled, silenceDurationSeconds: watchSilenceDurationSeconds),
+            watchRecordingRevision: saved.watchRecordingRevision)
     }
 }

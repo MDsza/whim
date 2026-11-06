@@ -17,16 +17,34 @@ public struct WebhookSettingsProjection: Codable, Equatable, Sendable {
 }
 
 public struct WatchSettingsProjection: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case availability, lastSynchronizedAt, resetState, recordingPreferencesState
+    }
     public let availability: String
     public let lastSynchronizedAt: Date?
     public let resetState: String
+    public let recordingPreferencesState: String
+    public init(availability: String, lastSynchronizedAt: Date?, resetState: String,
+                recordingPreferencesState: String = "unavailable") {
+        self.availability = availability; self.lastSynchronizedAt = lastSynchronizedAt
+        self.resetState = resetState; self.recordingPreferencesState = recordingPreferencesState
+    }
     public static let unavailable = Self(availability: "unavailable", lastSynchronizedAt: nil, resetState: "unavailable")
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(availability: try values.decode(String.self, forKey: .availability),
+            lastSynchronizedAt: try values.decodeIfPresent(Date.self, forKey: .lastSynchronizedAt),
+            resetState: try values.decode(String.self, forKey: .resetState),
+            recordingPreferencesState: try values.decodeIfPresent(String.self, forKey: .recordingPreferencesState) ?? "unavailable")
+    }
 
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(availability, forKey: .availability)
         try values.encode(lastSynchronizedAt, forKey: .lastSynchronizedAt)
         try values.encode(resetState, forKey: .resetState)
+        try values.encode(recordingPreferencesState, forKey: .recordingPreferencesState)
     }
 }
 

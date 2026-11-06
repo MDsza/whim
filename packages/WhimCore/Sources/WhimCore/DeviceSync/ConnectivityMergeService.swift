@@ -8,19 +8,32 @@ public actor ConnectivityMergeService {
     private let device: AttemptDevice
     private let credentials: (any CredentialStore)?
     private let transport: (any PeerTransport)?
+    private let preferences: (any PreferenceStoring)?
+    public nonisolated let managesPreferences: Bool
     private var lastConfigurationContext: String?
 
     public init(store: any WhimStore, files: any AudioFileManaging, databaseURL: URL,
-                root: URL, device: AttemptDevice, credentials: (any CredentialStore)? = nil, transport: (any PeerTransport)? = nil) throws {
+                root: URL, device: AttemptDevice, credentials: (any CredentialStore)? = nil, transport: (any PeerTransport)? = nil,
+                preferences: (any PreferenceStoring)? = nil) throws {
         self.store = store; self.files = files; self.root = root; self.device = device; self.credentials = credentials; self.transport = transport
+        self.preferences = preferences; managesPreferences = preferences != nil
         journal = try ConnectivityJournal(databaseURL: databaseURL)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+
+    public func queueWatchRecordingPreferences(_ transfer: WatchRecordingPreferencesTransfer) async throws {
+        guard device == .iphone else { return }
+        try transfer.preferences.validate()
+        // Enqueue first: a crash before recording publication simply repeats this idempotent enqueue.
+        try journal.enqueue(.init(generation: generation(), payload: .watchRecordingPreferences(transfer)))
+        try journal.write(transfer, key: "watchRecordingOutgoing")
+        try await flush()
     }
 
     @discardableResult public func apply(_ envelope: ConnectivityEnvelope) async throws -> NoteID? {
         guard envelope.schemaVersion == 1 else { throw ConnectivityError.unsupportedSchema }
         let needsAppliedAcknowledgement: Bool
-        switch envelope.payload { case .reset, .deletion: needsAppliedAcknowledgement = true; default: needsAppliedAcknowledgement = false }
+        switch envelope.payload { case .reset, .deletion, .watchRecordingPreferences: needsAppliedAcknowledgement = true; default: needsAppliedAcknowledgement = false }
         if !needsAppliedAcknowledgement, try journal.wasApplied(envelope.messageID) {
             try acknowledgeDurable(envelope)
             return nil
@@ -32,6 +45,9 @@ public actor ConnectivityMergeService {
 
     private func applyNew(_ envelope: ConnectivityEnvelope) async throws -> NoteID? {
         guard envelope.schemaVersion == 1 else { throw ConnectivityError.unsupportedSchema }
+        if case .watchRecordingPreferences(let transfer) = envelope.payload {
+            try transfer.preferences.validate()
+        }
         if case .reset = envelope.payload {
             try await applyReset(envelope)
             try acknowledgeDurable(envelope)
@@ -44,6 +60,26 @@ public actor ConnectivityMergeService {
         if case .deletion = envelope.payload {} else { try acknowledgeDurable(envelope) }
         guard envelope.generation == state.generation else { return nil }
         switch envelope.payload {
+        case .watchRecordingPreferences(let transfer):
+            guard device == .appleWatch, let preferences else { return nil }
+            let saved = try await preferences.load()
+            guard transfer.revision >= saved.watchRecordingRevision else { return nil }
+            if transfer.revision == saved.watchRecordingRevision {
+                guard transfer.preferences == saved.watchRecording else { throw ConnectivityError.invalidConfiguration }
+            } else {
+                try await preferences.save(saved.replacingWatchRecording(transfer.preferences, revision: transfer.revision))
+            }
+            try journal.write([transfer.revision], key: "watchRecordingApplied")
+            try journal.enqueue(.init(generation: envelope.generation,
+                payload: .acknowledgement(.watchRecordingPreferences(transfer.revision))), resubmit: true)
+            return nil
+        case .acknowledgement(.watchRecordingPreferences(let revision)):
+            guard device == .iphone,
+                  let outgoing = try journal.read("watchRecordingOutgoing", as: WatchRecordingPreferencesTransfer.self),
+                  outgoing.revision == revision else { return nil }
+            try journal.write([revision], key: "watchRecordingAcknowledged")
+            try journal.acknowledgeApplied(.watchRecordingPreferences(outgoing), generation: envelope.generation)
+            return nil
         case .audioRequest(let request):
             guard device == .appleWatch else { return nil }
             try await sendRequestedAudio(request, generation: envelope.generation)
@@ -397,12 +433,18 @@ public actor ConnectivityMergeService {
         try await flush()
     }
 
-    public func status() throws -> WatchSettingsProjection {
+    public func status(recordingPreferencesRevision: UInt64? = nil) throws -> WatchSettingsProjection {
         let reset = try journal.resetState()
         let endpoints = try journal.read("resetAcknowledged", as: [String].self) ?? []
+        let outgoing = try journal.read("watchRecordingOutgoing", as: WatchRecordingPreferencesTransfer.self)
+        let expected = recordingPreferencesRevision ?? outgoing?.revision
+        let appliedKey = device == .iphone ? "watchRecordingAcknowledged" : "watchRecordingApplied"
+        let applied = try journal.read(appliedKey, as: [UInt64].self)?.first
+        let preferenceState = expected.map { $0 == applied ? "synchronized" : "pending" } ?? "unavailable"
         return WatchSettingsProjection(availability: transport?.isAvailable == true ? "available" : "unavailable",
             lastSynchronizedAt: try journal.read("lastSynchronizedAt", as: [Date].self)?.first,
-            resetState: reset.generation == .initial ? "idle" : endpoints.count >= 2 ? "synchronized" : "pending")
+            resetState: reset.generation == .initial ? "idle" : endpoints.count >= 2 ? "synchronized" : "pending",
+            recordingPreferencesState: preferenceState)
     }
 
     public func generation() throws -> ResetGeneration { try journal.resetState().generation }
@@ -441,6 +483,8 @@ public actor ConnectivityMergeService {
         }
         try await store.reset()
         try await credentials?.removeAll()
+        try await preferences?.reset()
+        try journal.clearWatchRecordingState()
         try journal.discard(before: generation)
         try journal.write([Date](), key: "lastSynchronizedAt")
         try journal.write([device.rawValue], key: "resetAcknowledged")

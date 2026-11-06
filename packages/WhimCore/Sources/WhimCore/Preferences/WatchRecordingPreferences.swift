@@ -28,3 +28,12 @@ public struct WatchRecordingPreferences: Codable, Equatable, Sendable {
         try validate()
     }
 }
+
+public struct WatchRecordingPreferencesTransfer: Codable, Equatable, Sendable {
+    public let revision: UInt64
+    public let preferences: WatchRecordingPreferences
+    public init(revision: UInt64, preferences: WatchRecordingPreferences) {
+        self.revision = revision
+        self.preferences = preferences
+    }
+}

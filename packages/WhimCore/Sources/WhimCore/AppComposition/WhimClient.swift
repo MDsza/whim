@@ -281,6 +281,12 @@ public struct PreferenceInput: Equatable, Sendable {
     }
     public static let `default` = PreferenceInput(retentionPolicy: .thirtyDays,
         transcriptionEnabled: true, transcriptionLocaleIdentifier: nil)
+
+    func replacingWatchRecording(_ value: WatchRecordingPreferences, revision: UInt64) -> Self {
+        .init(retentionPolicy: retentionPolicy, transcriptionEnabled: transcriptionEnabled,
+            transcriptionLocaleIdentifier: transcriptionLocaleIdentifier,
+            watchRecording: value, watchRecordingRevision: revision)
+    }
 }
 
 extension PreferenceInput: Codable {

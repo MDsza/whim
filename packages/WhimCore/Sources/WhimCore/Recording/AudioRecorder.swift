@@ -1,6 +1,8 @@
 import Foundation
 
 public enum RecordingEvent: Sendable, Equatable {
+    /// One hardware observation, with recording-relative time attached to its level.
+    case meter(elapsed: TimeInterval, peakPowerDBFS: Float)
     case elapsed(TimeInterval)
     case peakPower(Float)
     case signal(RecordingSignal)

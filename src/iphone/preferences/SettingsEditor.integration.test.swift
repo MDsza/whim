@@ -3,6 +3,41 @@ import WhimCore
 @testable import WhimIPhone
 
 @MainActor final class SettingsEditorIntegrationTests: XCTestCase {
+    // Break: saving a Watch draft drops unrelated preferences or fails to persist the Watch choice.
+    func testWatchRecordingDraftSavesWithoutChangingOtherPreferences() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let client = h.makeService()
+        try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: false,
+            transcriptionLocaleIdentifier: "es-ES"))
+        let editor = SettingsEditor(client: client, preferences: try await client.settings().preferences, deviceLanguage: "en-US")
+        XCTAssertTrue(editor.watchAutoStopEnabled)
+        XCTAssertEqual(editor.watchSilenceDurationSeconds, 3)
+        XCTAssertFalse(editor.isDirty)
+        editor.watchAutoStopEnabled = false
+        editor.watchSilenceDurationSeconds = 10
+        XCTAssertTrue(editor.canSave)
+        await editor.save()
+        XCTAssertNil(editor.error)
+        XCTAssertFalse(editor.isDirty)
+        let saved = try await client.settings().preferences
+        XCTAssertEqual(saved.watchRecording, .init(autoStopEnabled: false, silenceDurationSeconds: 10))
+        XCTAssertEqual(saved.retentionPolicy, .never)
+        XCTAssertFalse(saved.transcriptionEnabled)
+        XCTAssertEqual(saved.transcriptionLocaleIdentifier, "es-ES")
+        editor.retentionPolicy = .oneDay
+        await editor.save()
+        let updated = try await client.settings().preferences
+        XCTAssertEqual(updated.watchRecording, saved.watchRecording)
+        editor.watchSilenceDurationSeconds = 11
+        await editor.save()
+        XCTAssertNotNil(editor.error)
+        XCTAssertTrue(editor.isDirty)
+        XCTAssertEqual(editor.watchSilenceDurationSeconds, 11)
+        let unchanged = try await client.settings().preferences
+        XCTAssertEqual(unchanged, updated)
+    }
+
     func testLanguageDefaultsToDeviceLanguageAndKeepsFollowingItWhenSaved() async throws {
         let harness = try WhimFacadeHarness()
         defer { harness.remove() }
