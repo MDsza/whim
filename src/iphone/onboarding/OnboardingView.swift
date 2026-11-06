@@ -138,6 +138,7 @@ struct OnboardingView: View {
 struct OnboardingFrame<Content: View, Actions: View>: View {
     let step: Int
     var totalSteps: Int = 4
+    var showsProgress = true
     var back: (() -> Void)? = nil
     @ViewBuilder var content: Content
     @ViewBuilder var actions: Actions
@@ -176,15 +177,19 @@ struct OnboardingFrame<Content: View, Actions: View>: View {
                 }
                 Text("whim").font(.title2.weight(.semibold))
                 Spacer()
-                Text(String(format: "%02d / %02d", step + 1, totalSteps))
-                    .font(.caption.monospaced()).foregroundStyle(.secondary)
-                    .accessibilityLabel("Step \(step + 1) of \(totalSteps)")
-            }
-            HStack(spacing: 6) {
-                ForEach(0..<totalSteps, id: \.self) { index in
-                    Capsule().fill(.white.opacity(index <= step ? 0.85 : 0.15)).frame(height: 2)
+                if showsProgress {
+                    Text(String(format: "%02d / %02d", step + 1, totalSteps))
+                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                        .accessibilityLabel("Step \(step + 1) of \(totalSteps)")
                 }
-            }.accessibilityHidden(true)
+            }
+            if showsProgress {
+                HStack(spacing: 6) {
+                    ForEach(0..<totalSteps, id: \.self) { index in
+                        Capsule().fill(.white.opacity(index <= step ? 0.85 : 0.15)).frame(height: 2)
+                    }
+                }.accessibilityHidden(true)
+            }
         }.padding(.horizontal, WhimSpacing.page).padding(.top, 12).padding(.bottom, 8)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
@@ -223,7 +228,7 @@ struct OnboardingMicrophoneHeading: View {
     }
 }
 
-private struct OnboardingHeading: View {
+struct OnboardingHeading: View {
     let title: String
     let detail: String
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 38
@@ -262,7 +267,7 @@ private struct OnboardingBenefit: View {
     }
 }
 
-private struct OnboardingPrimaryButtonStyle: ButtonStyle {
+struct OnboardingPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.labelStyle(.titleOnly).font(.body.weight(.semibold)).multilineTextAlignment(.center)
@@ -273,7 +278,7 @@ private struct OnboardingPrimaryButtonStyle: ButtonStyle {
     }
 }
 
-private struct OnboardingSecondaryButtonStyle: ButtonStyle {
+struct OnboardingSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
