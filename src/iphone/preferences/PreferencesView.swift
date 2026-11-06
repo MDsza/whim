@@ -171,30 +171,8 @@ struct SettingsSectionView: View {
             footnote("Choose whether notification previews show Note titles on the Lock Screen in system Settings → Notifications → Whim → Show Previews.")
             Button("Notification preview settings", systemImage: "bell.badge") { systemSettings() }.whimGlassButton()
         case .watch:
-            Toggle("Auto-stop after silence", isOn: $editor.watchAutoStopEnabled)
-                .frame(minHeight: 44)
-                .accessibilityIdentifier("watch-auto-stop-enabled")
-            VStack(alignment: .leading, spacing: WhimSpacing.field) {
-                WhimLabeledValue {
-                    Text("Silence duration")
-                } value: {
-                    Text("\(editor.watchSilenceDurationSeconds) seconds").monospacedDigit()
-                }
-                Slider(value: Binding(
-                    get: { Double(editor.watchSilenceDurationSeconds) },
-                    set: { editor.watchSilenceDurationSeconds = Int($0.rounded()) }),
-                    in: 2...10, step: 1) {
-                    Text("Silence duration")
-                } minimumValueLabel: {
-                    Text("2 s")
-                } maximumValueLabel: {
-                    Text("10 s")
-                }
-                .frame(minHeight: 44)
-                .disabled(!editor.watchAutoStopEnabled)
-                .accessibilityValue("\(editor.watchSilenceDurationSeconds) seconds")
-                .accessibilityIdentifier("watch-silence-duration")
-            }
+            WatchRecordingControls(autoStopEnabled: $editor.watchAutoStopEnabled,
+                silenceDurationSeconds: $editor.watchSilenceDurationSeconds)
             footnote("After you speak, Whim stops, saves, and sends when it detects silence. Applies to Apple Watch recordings.")
             Text(watchRecordingSynchronization)
                 .font(.footnote).foregroundStyle(.secondary)
@@ -275,4 +253,39 @@ struct SettingsSectionView: View {
         .frame(minHeight: 44)
     }
     private func systemSettings() { Task { await model.perform { try await model.client.openSystemSettings() } } }
+}
+
+/// The same native controls are used in Settings and the update onboarding screen.
+struct WatchRecordingControls: View {
+    @Binding var autoStopEnabled: Bool
+    @Binding var silenceDurationSeconds: Int
+
+    var body: some View {
+        Group {
+            Toggle("Auto-stop after silence", isOn: $autoStopEnabled)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("watch-auto-stop-enabled")
+            VStack(alignment: .leading, spacing: WhimSpacing.field) {
+                WhimLabeledValue {
+                    Text("Silence duration")
+                } value: {
+                    Text("\(silenceDurationSeconds) seconds").monospacedDigit()
+                }
+                Slider(value: Binding(
+                    get: { Double(silenceDurationSeconds) },
+                    set: { silenceDurationSeconds = Int($0.rounded()) }),
+                    in: 2...10, step: 1) {
+                    Text("Silence duration")
+                } minimumValueLabel: {
+                    Text("2 s")
+                } maximumValueLabel: {
+                    Text("10 s")
+                }
+                .frame(minHeight: 44)
+                .disabled(!autoStopEnabled)
+                .accessibilityValue("\(silenceDurationSeconds) seconds")
+                .accessibilityIdentifier("watch-silence-duration")
+            }
+        }
+    }
 }

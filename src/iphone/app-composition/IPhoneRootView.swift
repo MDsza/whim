@@ -5,6 +5,7 @@ import WhimIPhone
 enum IPhoneRoute: Hashable { case settings, settingsSection(SettingsSection), note(NoteID) }
 struct IPhoneRootView: View {
     @AppStorage("onboarding.quickCapture.v1.acknowledged", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var setupAcknowledged = false
+    @AppStorage(WatchRecordingUpdate.acknowledgementKey, store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var watchUpdateAcknowledged = false
     @Bindable var model: IPhoneModel
     var pendingLink: PendingIPhoneLink?
     @Environment(\.scenePhase) private var phase
@@ -15,9 +16,14 @@ struct IPhoneRootView: View {
         NavigationStack(path: $path) {
             Group {
                 if QuickCaptureGuide.needsUpgradeGuide(onboardingCompleted: model.onboardingCompleted, acknowledged: setupAcknowledged), model.recording == nil {
-                    OnboardingView(model: model, settings: model.settings, setupOnly: true, setupAcknowledged: $setupAcknowledged)
+                    OnboardingView(model: model, settings: model.settings, setupOnly: true,
+                        setupAcknowledged: $setupAcknowledged, watchUpdateAcknowledged: $watchUpdateAcknowledged)
+                } else if WatchRecordingUpdate.needsPresentation(onboardingCompleted: model.onboardingCompleted,
+                    acknowledged: watchUpdateAcknowledged, isRecording: model.recording != nil) {
+                    WatchRecordingUpdateView(client: model.client) { watchUpdateAcknowledged = true }
                 } else if model.onboardingCompleted { home }
-                else { OnboardingView(model: model, settings: model.settings, setupAcknowledged: $setupAcknowledged) }
+                else { OnboardingView(model: model, settings: model.settings, setupAcknowledged: $setupAcknowledged,
+                    watchUpdateAcknowledged: $watchUpdateAcknowledged) }
             }
             // The stack's root does not inherit insets applied outside NavigationStack.
             .modifier(IPhoneFailurePresentation(model: model,

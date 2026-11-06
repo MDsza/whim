@@ -48,6 +48,10 @@ struct PendingIPhoneLink { let id = UUID(); let url: URL }
             #if DEBUG
             // Hold only the automatic launch task to exercise the first rendered shell.
             let arguments = ProcessInfo.processInfo.arguments
+            // Installed upgrade journeys begin with the persisted state of a prior release.
+            if arguments.contains("-WhimFixtureAudio"), arguments.contains("-WhimFixtureWatchUpdate") {
+                onboarding.complete()
+            }
             if arguments.contains("-WhimFixtureAudio"),
                let index = arguments.firstIndex(of: "-WhimStartupDelayMilliseconds"),
                arguments.indices.contains(index + 1), let delay = Int(arguments[index + 1]), delay > 0 {

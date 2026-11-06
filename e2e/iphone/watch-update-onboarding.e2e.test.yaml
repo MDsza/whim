@@ -1,0 +1,95 @@
+appId: app.whim.ios
+---
+- launchApp:
+    clearState: true
+    arguments:
+      -WhimFixtureAudio: ${WHIM_FIXTURE_AUDIO}
+      -WhimFixtureWatchUpdate: true
+    permissions:
+      all: allow
+# Users from older releases may still have the previous setup guide pending.
+- extendedWaitUntil:
+    visible:
+      id: quick-capture-setup
+    timeout: 60000
+- tapOn: Skip for now
+- extendedWaitUntil:
+    visible:
+      id: watch-recording-update
+    timeout: 60000
+- assertVisible: 3 seconds
+- assertVisible:
+    id: watch-silence-duration
+    enabled: true
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 17%, 50%
+    direction: RIGHT
+    duration: 1500
+- assertVisible: 10 seconds
+- tapOn:
+    id: watch-auto-stop-enabled
+    point: 92%, 50%
+- tapOn: Continue
+- extendedWaitUntil:
+    visible:
+      id: whim-home
+    timeout: 60000
+- tapOn: Settings
+- tapOn:
+    id: settings-watch
+- assertVisible: 10 seconds
+- assertVisible:
+    id: watch-silence-duration
+    enabled: false
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: whim-home
+    timeout: 60000
+- assertNotVisible:
+    id: watch-recording-update
+# Skipping the update must keep the default settings and also dismiss it permanently.
+- launchApp:
+    clearState: true
+    arguments:
+      -WhimFixtureAudio: ${WHIM_FIXTURE_AUDIO}
+      -WhimFixtureWatchUpdate: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: quick-capture-setup
+    timeout: 60000
+- tapOn: Skip for now
+- extendedWaitUntil:
+    visible:
+      id: watch-recording-update
+    timeout: 60000
+- tapOn:
+    id: watch-auto-stop-enabled
+    point: 92%, 50%
+- tapOn: Not now
+- extendedWaitUntil:
+    visible:
+      id: whim-home
+    timeout: 60000
+- tapOn: Settings
+- tapOn:
+    id: settings-watch
+- assertVisible: 3 seconds
+- assertVisible:
+    id: watch-silence-duration
+    enabled: true
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: whim-home
+    timeout: 60000
+- assertNotVisible:
+    id: watch-recording-update

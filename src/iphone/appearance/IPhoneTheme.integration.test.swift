@@ -6,6 +6,18 @@ import WhimIPhone
 @testable import whim
 
 @MainActor final class IPhoneSpacingTests: XCTestCase {
+    // Break: update controls overflow a narrow screen or become inaccessible at large text sizes.
+    func testWatchRecordingUpdateFitsStandardAndAccessibilityTextSizes() async throws {
+        let fixture = try WhimFacadeHarness()
+        defer { fixture.remove() }
+        for size in [DynamicTypeSize.large, .accessibility3] {
+            try await render("watch-update-\(size.isAccessibilitySize ? "large-text" : "standard")",
+                             size: size, navigation: false) {
+                WatchRecordingUpdateView(client: fixture.makeService(), finished: {})
+            }
+        }
+    }
+
     func testPermissionsPageRecordsTheVisitAndRemovesTheHomeReminder() async throws {
         let fixture = try WhimFacadeHarness()
         defer { fixture.remove() }
@@ -143,6 +155,17 @@ import WhimIPhone
                                       navigation: Bool = true, requiresScroll: Bool = true,
                                       @ViewBuilder content: () -> Content) async throws {
         print("Rendering spacing check: \(name)")
+        // Capture renders represent users who have already dismissed upgrade notices.
+        let defaults = UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)!
+        let keys = ["onboarding.quickCapture.v1.acknowledged", WatchRecordingUpdate.acknowledgementKey]
+        let previous = keys.map { defaults.object(forKey: $0) }
+        for key in keys { defaults.set(true, forKey: key) }
+        defer {
+            for (key, value) in zip(keys, previous) {
+                if let value { defaults.set(value, forKey: key) }
+                else { defaults.removeObject(forKey: key) }
+            }
+        }
         let page = AnyView(content())
         let root = navigation ? AnyView(NavigationStack { page }) : page
         let host = UIHostingController(rootView: root

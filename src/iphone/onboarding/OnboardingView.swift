@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @AppStorage("onboarding.v1.step", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var savedStep = 0
     @Binding private var setupAcknowledged: Bool
     @AppStorage("onboarding.quickCapture.v1.step", store: UserDefaults(suiteName: WhimProductionComposition.appGroupIdentifier)) private var upgradeStep = 3
+    @Binding private var watchUpdateAcknowledged: Bool
     let setupOnly: Bool
     private var step: Int { QuickCaptureGuide.onboardingStep(saved: setupOnly ? upgradeStep : savedStep, setupOnly: setupOnly) }
     @State private var setupPage = 0
@@ -16,8 +17,10 @@ struct OnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var textSize
 
-    init(model: IPhoneModel, settings: SettingsProjection?, setupOnly: Bool = false, setupAcknowledged: Binding<Bool> = .constant(false)) {
+    init(model: IPhoneModel, settings: SettingsProjection?, setupOnly: Bool = false,
+         setupAcknowledged: Binding<Bool> = .constant(false), watchUpdateAcknowledged: Binding<Bool> = .constant(false)) {
         self._setupAcknowledged = setupAcknowledged
+        self._watchUpdateAcknowledged = watchUpdateAcknowledged
         self.setupOnly = setupOnly
         self.model = model; self.settings = settings
         _webhook = State(initialValue: WebhookEditor(client: model.client))
@@ -129,9 +132,47 @@ struct OnboardingView: View {
         // Acknowledge while this view is mounted, before completion can replace it.
         setupAcknowledged = true
         guard !setupOnly else { return }
+        watchUpdateAcknowledged = true
         Task { await model.perform { try await model.client.completeOnboarding() } }
     }
 
+}
+
+struct WatchRecordingUpdateView: View {
+    @State private var update: WatchRecordingUpdate
+    let finished: () -> Void
+
+    init(client: any WhimClient, finished: @escaping () -> Void) {
+        _update = State(initialValue: WatchRecordingUpdate(client: client))
+        self.finished = finished
+    }
+
+    var body: some View {
+        OnboardingFrame(step: 0, totalSteps: 1) {
+            VStack(alignment: .leading, spacing: 32) {
+                OnboardingHeading(title: "Hands-free Notes on Apple Watch",
+                    detail: "After you speak, Whim can stop, save, and send your Note when it detects silence.")
+                WatchRecordingControls(autoStopEnabled: $update.autoStopEnabled,
+                    silenceDurationSeconds: $update.silenceDurationSeconds)
+                Text("You can change this any time in Settings → Apple Watch.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = update.error { WhimErrorText(message: error.message) }
+            }
+        } actions: {
+            Button {
+                Task { if await update.save() { finished() } }
+            } label: {
+                HStack {
+                    Text("Continue")
+                    if update.isPending { ProgressView() }
+                }
+            }.buttonStyle(OnboardingPrimaryButtonStyle())
+            Button("Not now", action: finished).buttonStyle(OnboardingSecondaryButtonStyle())
+        }
+        .disabled(update.isPending)
+        .accessibilityIdentifier("watch-recording-update")
+    }
 }
 
 /// Startup and the interactive welcome share their first frame.
