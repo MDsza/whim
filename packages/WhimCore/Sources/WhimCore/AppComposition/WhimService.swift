@@ -487,6 +487,7 @@ public actor WhimService: WhimClient {
     }
 
     public func updatePreferences(_ input: PreferenceInput) async throws {
+        try input.watchRecording.validate()
         try await launch(); await beginCommand(); defer { endCommand() }
         try await preferences.save(input)
         try await runRetention()

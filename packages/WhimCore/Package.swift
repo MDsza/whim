@@ -3,6 +3,7 @@
 import PackageDescription
 
 let productionSources = [
+    "Preferences/WatchRecordingPreferences.swift",
     "Maintenance/BackgroundScheduler.swift",
     "Maintenance/BGTaskSchedulerAdapter.swift",
     "Maintenance/WatchBackgroundScheduler.swift",
@@ -79,6 +80,7 @@ let productionSources = [
     "WebhookConfiguration/WebhookRequestBuilder.swift",
 ]
 let unitTestSources = [
+    "Preferences/WatchRecordingPreferences.test.swift",
     "Maintenance/WatchBackgroundScheduler.test.swift",
     "Recording/CaptureLatencyProbe.test.swift",
     "Recording/ComplicationSnapshot.test.swift",
@@ -110,6 +112,7 @@ let unitTestSources = [
     "WebhookConfiguration/WebhookRequestBuilder.test.swift",
 ]
 let integrationTestSources = [
+    "Preferences/WatchRecordingPreferences.integration.test.swift",
     "Maintenance/MaintenanceService.integration.test.swift",
     "Recording/PCMRecorderHardware.integration.test.swift",
     "Playback/AVAudioWaveformAdapter.integration.test.swift",

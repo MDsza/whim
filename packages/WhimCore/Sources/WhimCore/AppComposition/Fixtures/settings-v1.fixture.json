@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "preferences": { "retentionPolicy": "thirty_days", "transcriptionEnabled": true, "transcriptionLocaleIdentifier": null },
+  "preferences": { "retentionPolicy": "thirty_days", "transcriptionEnabled": true, "transcriptionLocaleIdentifier": null, "watchRecording": { "autoStopEnabled": true, "silenceDurationSeconds": 3 }, "watchRecordingRevision": 0 },
   "webhook": null,
   "watch": { "availability": "unavailable", "lastSynchronizedAt": null, "resetState": "unavailable" },
   "onboardingCompleted": false,

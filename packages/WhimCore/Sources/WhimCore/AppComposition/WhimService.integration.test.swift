@@ -4,6 +4,21 @@ import XCTest
 @testable import WhimCore
 
 final class WhimServiceIntegrationTests: XCTestCase {
+    // Break: invalid Watch settings partially overwrite other saved preferences.
+    func testInvalidWatchDurationDoesNotSaveAnyPreferences() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let client = h.makeService()
+        do {
+            try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: false,
+                transcriptionLocaleIdentifier: "es-ES",
+                watchRecording: .init(autoStopEnabled: false, silenceDurationSeconds: 11)))
+            XCTFail("Invalid silence duration was accepted")
+        } catch WatchRecordingPreferences.ValidationError.invalidSilenceDuration { }
+        let saved = try await client.settings().preferences
+        XCTAssertEqual(saved, .default)
+    }
+
     func testConfigurationAndDeletionRefreshBackgroundEligibility() async throws {
         let harness = try WhimFacadeHarness(responses: [HTTPResponse(statusCode: 500)])
         defer { harness.remove() }
