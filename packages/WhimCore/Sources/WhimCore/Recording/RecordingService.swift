@@ -175,6 +175,13 @@ public actor RecordingService {
         try await beginFinalization(outcome: .completed)
     }
 
+    /// A delayed caller can stop only the Recording Session it owns.
+    public func stop(sessionID: RecordingSessionID) async throws -> Note? {
+        if let startTask { _ = try await startTask.value }
+        guard active?.sessionID == sessionID, discardTask == nil else { return nil }
+        return try await beginFinalization(outcome: .completed)
+    }
+
     public func handleInterruption() async throws -> Note? {
         try await beginFinalization(outcome: .interrupted)
     }
@@ -258,7 +265,7 @@ public actor RecordingService {
             guard captureExists, silencePolicy?.consume(elapsed: elapsed, peakPowerDBFS: power) == true,
                   let session = active ?? activating else { return }
             silencePolicy = nil
-            Task { try? await self.stopAutomatically(sessionID: session.sessionID) }
+            Task { try? await self.stop(sessionID: session.sessionID) }
         case .elapsed(let elapsed):
             guard captureExists else { return }
             serviceEventContinuation.yield(.elapsed(elapsed))
@@ -271,7 +278,7 @@ public actor RecordingService {
             if elapsed >= RecordingLimits.maximumDuration.timeInterval, !maximumStopRequested {
                 maximumStopRequested = true
                 if let session = active ?? activating {
-                    Task { try? await self.stopAutomatically(sessionID: session.sessionID) }
+                    Task { try? await self.stop(sessionID: session.sessionID) }
                 }
             }
         case .signal(let signal):
@@ -315,12 +322,6 @@ public actor RecordingService {
     private func recorderEventsEnded() {
         recorderStreamEnded = true
         failEncoderWaiter(with: .eventStreamEnded)
-    }
-
-    private func stopAutomatically(sessionID: RecordingSessionID) async throws {
-        if let startTask { _ = try await startTask.value }
-        guard active?.sessionID == sessionID, discardTask == nil else { return }
-        _ = try await beginFinalization(outcome: .completed)
     }
 
     private func failEncoderWaiter(with error: RecordingServiceError) {

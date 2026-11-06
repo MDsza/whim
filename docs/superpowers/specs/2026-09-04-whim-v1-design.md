@@ -137,7 +137,7 @@ The iPhone imports Watch files and state idempotently in either arrival order, g
 
 Watch metadata creates a visible iPhone Note even before its audio arrives. Its explicit local Audio Synchronization state does not claim playable local audio exists and prevents local playback, title enrichment, Delivery and retention until valid audio is durable. Audio Synchronization is independent of Delivery: a Watch Receipt remains Sent while iPhone shows pending or failed synchronization. A corrupt transfer allows at most three total transfers per cycle, including the first, before showing Sync failed. Waiting or disconnection does not consume the budget; duplicate replies and process restarts do not advance it. Retry sync starts a new cycle of up to three transfers. Pending and failed synchronization can be deleted with confirmation, using the same paired-device tombstones. See the [audio synchronization design](2026-10-26-watch-audio-synchronization-design.md).
 
-Watch recording continues through wrist-down until Stop, an audio interruption, or the five-minute limit. This behavior is a release-blocking physical-device acceptance criterion.
+Watch recording continues through wrist-down until Stop, configured silence auto-stop, an audio interruption, or the five-minute limit. This behavior is a release-blocking physical-device acceptance criterion.
 
 ## Cross-device configuration and state
 
@@ -290,7 +290,11 @@ The iPhone uses a sober black appearance with white accents and native typograph
 
 After microphone permission exists, launching Whim through the app icon, complication, App Shortcut, or supported Action-button route starts recording immediately. The primary view shows elapsed time, Stop, and Discard. A secondary recent-Notes view exposes locally available playback, delivery status, Retry, and Delete.
 
-Watch produces a distinct start haptic, restores the active recorder after wrist-down, and stops safely at five minutes. Configuration may be viewed only as available/unavailable and last synchronized.
+Watch produces a distinct start haptic, restores the active recorder after wrist-down, and stops safely at five minutes. Webhook configuration may be viewed only as available/unavailable and last synchronized.
+
+Automatic and manual completion produce one stop haptic per Recording Session. Delayed silence and maximum-duration stop commands are bound to their originating Recording Session; an obsolete command must not finalize a later capture.
+
+Settings → Apple Watch on iPhone includes Auto-stop after silence, enabled by default, and a silence-duration slider from 2 to 10 seconds in one-second steps, defaulting to 3 seconds. The slider keeps its value when disabled. The existing Save action persists these preferences and synchronizes them independently of webhook configuration. The Watch retains the latest applied choice offline; pending/applied status is separate from webhook synchronization. Each Watch Recording Session snapshots its local choice at start. After meaningful audio, a continuous quiet interval triggers normal Stop, saving one completed Note and starting its existing Workflow. Initial silence alone does not arm this behavior, resumed audio resets the interval, and missing meter samples are never treated as silence. Manual Stop, immediate Discard, the two-second internal minimum, and the five-minute maximum remain safeguards. iPhone capture does not use this rule. Real microphone thresholds, quiet speech, ambient noise, and wrist-down execution require physical acceptance in `e2e/physical/watch-capture.e2e.test.md`.
 
 The WidgetKit complication shows the Whim mark while idle, elapsed recording time above the Watch app's Stop glyph while active (the circular family uses the compact mark), and an attention indicator when failed Notes exist. Tapping it launches directly into capture.
 

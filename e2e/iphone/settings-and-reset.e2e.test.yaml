@@ -87,6 +87,9 @@ appId: app.whim.ios
     id: BackButton
 - tapOn:
     id: settings-watch
+- scrollUntilVisible:
+    element: 'Watch synchronization (available|unavailable).'
+    direction: DOWN
 - assertVisible: 'Watch synchronization (available|unavailable).'
 - tapOn:
     id: BackButton

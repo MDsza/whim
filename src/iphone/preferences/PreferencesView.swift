@@ -104,7 +104,7 @@ struct SettingsSectionView: View {
         _editor = State(initialValue: SettingsEditor(client: model.client, preferences: settings.preferences))
         _errorLog = State(initialValue: WebhookErrorLog(client: model.client))
     }
-    private var isEditable: Bool { [.webhook, .audio, .titles].contains(section) }
+    private var isEditable: Bool { [.webhook, .audio, .titles, .watch].contains(section) }
     var body: some View {
         WhimContent(spacing: WhimSpacing.group) {
             content
@@ -171,6 +171,35 @@ struct SettingsSectionView: View {
             footnote("Choose whether notification previews show Note titles on the Lock Screen in system Settings → Notifications → Whim → Show Previews.")
             Button("Notification preview settings", systemImage: "bell.badge") { systemSettings() }.whimGlassButton()
         case .watch:
+            Toggle("Auto-stop after silence", isOn: $editor.watchAutoStopEnabled)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("watch-auto-stop-enabled")
+            VStack(alignment: .leading, spacing: WhimSpacing.field) {
+                WhimLabeledValue {
+                    Text("Silence duration")
+                } value: {
+                    Text("\(editor.watchSilenceDurationSeconds) seconds").monospacedDigit()
+                }
+                Slider(value: Binding(
+                    get: { Double(editor.watchSilenceDurationSeconds) },
+                    set: { editor.watchSilenceDurationSeconds = Int($0.rounded()) }),
+                    in: 2...10, step: 1) {
+                    Text("Silence duration")
+                } minimumValueLabel: {
+                    Text("2 s")
+                } maximumValueLabel: {
+                    Text("10 s")
+                }
+                .frame(minHeight: 44)
+                .disabled(!editor.watchAutoStopEnabled)
+                .accessibilityValue("\(editor.watchSilenceDurationSeconds) seconds")
+                .accessibilityIdentifier("watch-silence-duration")
+            }
+            footnote("After you speak, Whim stops, saves, and sends when it detects silence. Applies to Apple Watch recordings.")
+            Text(watchRecordingSynchronization)
+                .font(.footnote).foregroundStyle(.secondary)
+                .accessibilityIdentifier("watch-recording-sync-status")
+            Divider()
             QuickCaptureSetupView(isWatch: true)
             Divider()
             Text("Watch synchronization \(settings.watch.availability).")
@@ -182,6 +211,14 @@ struct SettingsSectionView: View {
                 Text("Reset completed on both devices.").foregroundStyle(.secondary)
             }
             footnote("A disconnected Watch cannot be erased immediately.")
+        }
+    }
+    private var watchRecordingSynchronization: String {
+        if editor.isDirty { return "Save to update your Apple Watch." }
+        switch settings.watch.recordingPreferencesState {
+        case "synchronized": return "Recording settings synchronized."
+        case "pending": return "Recording settings will sync with your Apple Watch."
+        default: return "Recording settings will sync when your Apple Watch is available."
         }
     }
     private func sectionShortcut(_ target: SettingsSection, label: String) -> some View {

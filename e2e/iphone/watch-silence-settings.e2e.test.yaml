@@ -1,0 +1,100 @@
+appId: app.whim.ios
+---
+- runFlow: flows/clean-launch.yaml
+- tapOn: Settings
+- tapOn:
+    id: settings-watch
+- assertVisible:
+    id: watch-auto-stop-enabled
+- assertVisible:
+    id: watch-silence-duration
+    enabled: true
+- assertVisible: 3 seconds
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 17%, 50%
+    direction: RIGHT
+    duration: 1500
+- assertVisible: 10 seconds
+- tapOn: Save settings
+- tapOn:
+    id: BackButton
+- tapOn:
+    id: settings-watch
+- assertVisible: 10 seconds
+- tapOn:
+    id: watch-auto-stop-enabled
+    point: 92%, 50%
+- assertVisible:
+    id: watch-silence-duration
+    enabled: false
+- tapOn: Save settings
+- tapOn:
+    id: BackButton
+- tapOn:
+    id: settings-watch
+- assertVisible:
+    id: watch-auto-stop-enabled
+- assertVisible:
+    id: watch-silence-duration
+    enabled: false
+- assertVisible: 10 seconds
+- tapOn:
+    id: watch-auto-stop-enabled
+    point: 92%, 50%
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 95%, 50%
+    direction: LEFT
+    duration: 1500
+# Finish at the minimum even when iOS releases the long drag one step short.
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 17%, 50%
+    direction: LEFT
+    duration: 1500
+- assertVisible: 2 seconds
+# Leaving a draft without Save must preserve the disabled/10-second stored choice.
+- tapOn:
+    id: BackButton
+- tapOn:
+    id: settings-watch
+- assertVisible:
+    id: watch-auto-stop-enabled
+- assertVisible:
+    id: watch-silence-duration
+    enabled: false
+- assertVisible: 10 seconds
+- tapOn:
+    id: watch-auto-stop-enabled
+    point: 92%, 50%
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 95%, 50%
+    direction: LEFT
+    duration: 1500
+# Finish at the minimum even when iOS releases the long drag one step short.
+- swipe:
+    from:
+      id: watch-silence-duration
+      point: 17%, 50%
+    direction: LEFT
+    duration: 1500
+- assertVisible: 2 seconds
+- tapOn: Save settings
+- tapOn:
+    id: BackButton
+- tapOn:
+    id: settings-watch
+- assertVisible:
+    id: watch-auto-stop-enabled
+- assertVisible:
+    id: watch-silence-duration
+    enabled: true
+- assertVisible: 2 seconds
+- assertVisible:
+    id: watch-recording-sync-status

@@ -118,3 +118,38 @@ undecided permission with both grant and denial. Denial must leave recording
 blocked with the existing Settings guidance; granting access must allow capture.
 The installed Watch UI regression resets system microphone authorization and
 checks the neutral action without the debug permission adapter.
+
+## Silence auto-stop (issue #50)
+
+Status: pending physical paired-device acceptance.
+
+1. On iPhone, open Settings → Apple Watch. Verify Auto-stop after silence is on,
+   the default duration is 3 seconds, the slider reaches 2 and 10 seconds in
+   one-second steps, and VoiceOver announces the label and duration with units.
+   Check large Dynamic Type and disabled-slider presentation. Save each change.
+2. Start Watch capture from the app, complication, and App Shortcut. Wait silently
+   before speaking: capture must remain active. Speak normally, pause less than the
+   selected interval, resume, then remain quiet for the full interval. Verify one
+   completed Note, normal stop feedback, and normal Delivery without tapping Stop.
+3. Repeat at 2 and 10 seconds. Confirm settings received during capture apply only
+   to the next Recording Session. Disable auto-stop and confirm silence requires
+   manual Stop. Re-enable and verify the previous duration is preserved.
+4. Repeat with quiet speech, in a quiet room, with road noise, and with wind. Verify
+   no premature cutoff. Record the environment and observed delay; sustained noise
+   may prevent the level meter from identifying silence. Tune the internal levels
+   only with deterministic regression coverage for the changed policy.
+5. Lower the wrist and let the screen sleep during speech and silence. Verify the
+   service still finalizes safely and returns to idle. No Speech permission is needed.
+6. Disconnect the phone after settings synchronize, restart Whim on Watch, and repeat.
+   Verify the cached settings still apply. Change settings while disconnected, reconnect,
+   and verify pending changes apply and acknowledgement updates the phone's status.
+7. Exercise manual Stop, immediate Discard, an audio interruption, and route changes
+   near the silence boundary. Expect at most one local Note and one logical Delivery;
+   Discard winning before finalization must leave no Note. Partial audio remains
+   recoverable on failure. Simultaneous cross-device Attempts retain the same Note ID.
+8. With continuous audio and with no meaningful audio after launch, verify the
+   existing five-minute warning and safe stop still work. Confirm iPhone capture is
+   unaffected by Watch auto-stop settings.
+
+Evidence: paired models/OS versions, selected duration, environment, observed stop
+latency, resulting Note/Delivery state, accessibility result, and wrist-down result.

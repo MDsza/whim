@@ -2,7 +2,7 @@
 
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task. Implement each behavior as a vertical test-driven slice through an agreed public seam.
 
-**Status:** Proposed solution; implementation has not started. The user confirmed the 3-second default. Other recommendations below remain proposals for review.
+**Status:** Approved by the user on 2026-11-06 and implemented. Final verification is in progress; physical acceptance remains pending. The user confirmed the 3-second default.
 
 **Goal:** After someone speaks into their Apple Watch, automatically stop the Recording Session, save a Note, and start its normal Workflow after a configurable period of silence.
 
@@ -156,4 +156,17 @@ Existing interfaces to extend:
 
 ## Planning verification
 
-The issue and comments, canonical terminology/design, recording adapter/service, preference persistence/editor/view, peer protocol/journal, package source lists, fixture recorder, and existing automated runners were inspected. This change adds only this proposed plan. No application code was changed and no implementation tests were run.
+The issue and comments, canonical terminology/design, recording adapter/service, preference persistence/editor/view, peer protocol/journal, package source lists, fixture recorder, and existing automated runners were inspected before implementation.
+
+## Implementation evidence
+
+- Preference decoding/migration, validation, persistence, silence completion, revision allocation, replay/reset ordering, and editor saving each have observed RED→GREEN evidence at their public seams.
+- All 28 RecordingService tests pass, including automatic finalization before manual Stop and stale session-owned Stop safety. Delayed silence and maximum-duration commands now use the same public `stop(sessionID:)` command; the session check prevents a delayed command from stopping a newer Recording Session without adding a test-only scheduler hook.
+- All 16 Watch model tests pass, including exactly one stop haptic for automatic and manual completion.
+- The installed Watch speech/silence journey passed: idle without tapping Stop, one Note, and one loopback HTTP request.
+- The complete installed iPhone settings journey passes: enabled/3-second defaults, both slider endpoints, save/reopen, disabling while preserving the duration, discarding unsaved edits, and synchronization status. Slider gestures target the thumb and use a short finishing drag at the minimum. The installed Watch synchronization journey also passes: a synchronized disabled choice persists across offline relaunch and silence still requires manual Stop. Both Watch journey results were checked in XCResult (one passed test each, no failures).
+- An independent read-only review found no confirmed production defect. Its race-test coverage finding was addressed with the session-owned command and strengthened companion tests; no second review was requested.
+- The latest unfiltered aggregate verification passed unit and integration stages: 141 core unit, 161 core integration, 9 iPhone unit, 55 iPhone integration, native system surfaces, native audio-session checks, and 16 Watch model tests. E2E stopped before app assertions because the paired iPhone was shut down before installation. An earlier aggregate failed with `No space left on device`; retries use external temporary storage, one build job, and the active simulator architecture. Earlier Maestro runs timed out during driver startup; the current budget reflects the observed 402-second Watch runner startup.
+- Simulator restart tolerates only the exact already-Booted/already-Shutdown states, while still validating healthy boot completion. Startup now precedes installation. Six deterministic runner tests pass, including a full shell-runner regression for an initially shut-down iPhone and rejection of real boot errors.
+- A subsequent unfiltered `test:all` passed unit and integration stages and reached the installed iPhone batch. Its first existing quick-capture setup journey failed to advance from the webhook onboarding screen to the microphone screen; the batch was stopped after this failure. The complete focused Watch-settings journey passed independently. The aggregate suite is therefore not green, and no aggregate-success claim is made.
+- Real microphone thresholds, quiet speech, noise, route changes, and wrist-down behavior remain physical acceptance cases in `e2e/physical/watch-capture.e2e.test.md`. Independent-process preference writers and downgrade/reinstall behavior were not added to this single-editor feature.

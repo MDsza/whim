@@ -7,6 +7,25 @@ import WhimCore
 
 @MainActor
 final class WatchModelIntegrationTests: XCTestCase {
+    func testSilenceAutoStopReturnsToIdleWithOneStopHapticPerSession() async throws {
+        let fixture = try WatchFixture()
+        defer { fixture.remove() }
+        var stops = 0
+        let model = WatchModel(client: fixture.client, haptic: { if $0 == .stop { stops += 1 } })
+        await model.activate()
+        for tick in 0...2 { await fixture.microphone.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        for tick in 3...33 { await fixture.microphone.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        try await waitForNote(fixture.client)
+        for _ in 0..<100 where model.recording != nil { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertNil(model.recording)
+        XCTAssertEqual(stops, 1)
+        await model.stop()
+        XCTAssertEqual(stops, 1, "An idempotent Stop must not repeat feedback")
+        await model.record()
+        await model.stop()
+        XCTAssertEqual(stops, 2, "Manual Stop also emits feedback only once")
+    }
+
     func testRepeatedSystemRecordFocusesCaptureFromPreviousNotes() async throws {
         let fixture = try WatchFixture()
         defer { fixture.remove() }

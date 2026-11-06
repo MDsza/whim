@@ -25,6 +25,21 @@ final class WatchRecordingPreferencesIntegrationTests: XCTestCase {
 
 
 final class WatchRecordingSynchronizationIntegrationTests: XCTestCase {
+    // Break: installed fixtures cannot supply the same authenticated preference envelope as the phone.
+    func testDebugPeerSuppliesDisabledWatchPreferencesThroughTheProtocol() throws {
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "configuration-test-fixture", withExtension: "m4a", subdirectory: "Fixtures"))
+        let peer = try XCTUnwrap(DebugPeerTransport.from(arguments: ["app", "-WhimPeerScenario", "watch-auto-stop-disabled"], fixture: fixture))
+        let received = LockedRecordingPeerMessages()
+        peer.activate { event in
+            if case .message(let message) = event { received.append(message) }
+        }
+        let transfer = received.values.compactMap { message -> WatchRecordingPreferencesTransfer? in
+            if case .watchRecordingPreferences(let value) = message.payload { return value }
+            return nil
+        }
+        XCTAssertEqual(transfer, [.init(revision: 1, preferences: .init(autoStopEnabled: false, silenceDurationSeconds: 10))])
+    }
+
     // Break: disconnected preferences are lost, accepted on the wrong device, or regress on replay.
     func testDurableWatchPreferencesSurviveRestartAndOutOfOrderMessagesWithoutWebhook() async throws {
         let phone = try RecordingSyncFixture(device: .iphone)
@@ -144,4 +159,11 @@ private final class RecordingSyncTransport: PeerTransport, @unchecked Sendable {
     func transfer(_ envelope: ConnectivityEnvelope) { messages.append(envelope) }
     func transferFile(at url: URL, metadata: ConnectivityEnvelope) {}
     func updateContext(_ envelope: ConnectivityEnvelope, credentials: StoredWebhookCredentials?) {}
+}
+
+private final class LockedRecordingPeerMessages: @unchecked Sendable {
+    private let lock = NSLock()
+    private var messages: [ConnectivityEnvelope] = []
+    var values: [ConnectivityEnvelope] { lock.withLock { messages } }
+    func append(_ message: ConnectivityEnvelope) { lock.withLock { messages.append(message) } }
 }

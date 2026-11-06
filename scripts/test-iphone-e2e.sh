@@ -82,9 +82,9 @@ fi
 
 whim_resolve_build_locations "$whim_derived_data" "id=${WHIM_IPHONE_SIMULATOR_UDID}"
 whim_app="$whim_build_products/Debug-iphonesimulator/whim.app"
+node "$whim_root/scripts/restart-e2e-simulator.mjs" "$WHIM_IPHONE_SIMULATOR_UDID"
 xcrun simctl uninstall "$WHIM_IPHONE_SIMULATOR_UDID" "$whim_bundle_id" >/dev/null 2>&1 || true
 xcrun simctl install "$WHIM_IPHONE_SIMULATOR_UDID" "$whim_app"
-node "$whim_root/scripts/restart-e2e-simulator.mjs" "$WHIM_IPHONE_SIMULATOR_UDID"
 whim_flows=(
   "$whim_root/e2e/iphone/quick-capture-setup.e2e.test.yaml"
   "$whim_root/e2e/iphone/history-sheet.e2e.test.yaml"
@@ -99,6 +99,7 @@ whim_flows=(
   "$whim_root/e2e/iphone/failed-and-retry.e2e.test.yaml"
   "$whim_root/e2e/iphone/recovered-review.e2e.test.yaml"
   "$whim_root/e2e/iphone/settings-and-reset.e2e.test.yaml"
+  "$whim_root/e2e/iphone/watch-silence-settings.e2e.test.yaml"
   "$whim_root/e2e/iphone/permission-review.e2e.test.yaml"
   "$whim_root/e2e/iphone/retention.e2e.test.yaml"
   "$whim_root/e2e/iphone/watch-synchronization.e2e.test.yaml"

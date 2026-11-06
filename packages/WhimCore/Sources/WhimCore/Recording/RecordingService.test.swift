@@ -3,14 +3,19 @@ import XCTest
 @testable import WhimCore
 
 final class RecordingServiceTests: XCTestCase {
-    // Break: an automatic request opens a second finalization while manual Stop owns the encoder.
+    // Break: manual Stop duplicates a finalization already started by silence auto-stop.
     func testAutomaticAndManualStopJoinOneNote() async throws {
         let h = RecordingHarness()
         _ = try await h.service.start(source: .appleWatch, autoStop: .default)
-        let stopping = Task { try await h.service.stop() }
-        await h.recorder.waitUntilStopStarts()
         for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
         for tick in 3...40 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.waitUntilStopStarts()
+        let requested = expectation(description: "manual Stop submitted during automatic finalization")
+        let stopping = Task {
+            requested.fulfill()
+            return try await h.service.stop()
+        }
+        await fulfillment(of: [requested], timeout: 1)
         await h.recorder.emit(.encoderCompleted(duration: 4, peakPowerDBFS: -20))
         let note = try await stopping.value
         XCTAssertNotNil(note)
@@ -18,6 +23,26 @@ final class RecordingServiceTests: XCTestCase {
         XCTAssertEqual(count, 1)
         let stops = await h.recorder.stopCount
         XCTAssertEqual(stops, 1)
+    }
+
+    // Break: an obsolete session-owned automatic command finalizes a subsequent capture.
+    func testDelayedAutomaticStopCannotFinalizeTheNextSession() async throws {
+        let h = RecordingHarness()
+        let first = try await h.service.start(source: .appleWatch, autoStop: .default)
+        await h.recorder.completeOnStop(duration: 4, peakPowerDBFS: -20)
+        for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        for tick in 3...33 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.waitUntilStopStarts()
+        // Discard joins automatic finalization once it already owns the encoder.
+        try await h.service.discard()
+        let second = try await h.service.start(source: .appleWatch, autoStop: .default)
+        let obsolete = try await h.service.stop(sessionID: first.sessionID)
+        XCTAssertNil(obsolete)
+        let active = await h.service.snapshot()
+        XCTAssertEqual(active?.sessionID, second.sessionID)
+        let count = await h.store.noteCount
+        XCTAssertEqual(count, 1)
+        try await h.service.discard()
     }
 
     // Break: discard or an earlier session's arming causes a later silent capture to become a Note.
