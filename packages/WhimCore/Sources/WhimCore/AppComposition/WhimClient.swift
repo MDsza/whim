@@ -269,18 +269,29 @@ public struct PreferenceInput: Equatable, Sendable {
     public let retentionPolicy: RetentionPolicy
     public let transcriptionEnabled: Bool
     public let transcriptionLocaleIdentifier: String?
+    public let watchRecording: WatchRecordingPreferences
+    public let watchRecordingRevision: UInt64
     public init(retentionPolicy: RetentionPolicy, transcriptionEnabled: Bool,
-                transcriptionLocaleIdentifier: String?) {
+                transcriptionLocaleIdentifier: String?, watchRecording: WatchRecordingPreferences = .default,
+                watchRecordingRevision: UInt64 = 0) {
         self.retentionPolicy = retentionPolicy; self.transcriptionEnabled = transcriptionEnabled
         self.transcriptionLocaleIdentifier = transcriptionLocaleIdentifier
+        self.watchRecording = watchRecording
+        self.watchRecordingRevision = watchRecordingRevision
     }
     public static let `default` = PreferenceInput(retentionPolicy: .thirtyDays,
         transcriptionEnabled: true, transcriptionLocaleIdentifier: nil)
+
+    func replacingWatchRecording(_ value: WatchRecordingPreferences, revision: UInt64) -> Self {
+        .init(retentionPolicy: retentionPolicy, transcriptionEnabled: transcriptionEnabled,
+            transcriptionLocaleIdentifier: transcriptionLocaleIdentifier,
+            watchRecording: value, watchRecordingRevision: revision)
+    }
 }
 
 extension PreferenceInput: Codable {
     private enum CodingKeys: String, CodingKey {
-        case retentionPolicy, transcriptionEnabled, transcriptionLocaleIdentifier
+        case retentionPolicy, transcriptionEnabled, transcriptionLocaleIdentifier, watchRecording, watchRecordingRevision
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -292,13 +303,17 @@ extension PreferenceInput: Codable {
         self.init(retentionPolicy: policy,
             transcriptionEnabled: try values.decode(Bool.self, forKey: .transcriptionEnabled),
             transcriptionLocaleIdentifier: try values.decodeIfPresent(String.self,
-                forKey: .transcriptionLocaleIdentifier))
+                forKey: .transcriptionLocaleIdentifier),
+            watchRecording: try values.decodeIfPresent(WatchRecordingPreferences.self, forKey: .watchRecording) ?? .default,
+            watchRecordingRevision: try values.decodeIfPresent(UInt64.self, forKey: .watchRecordingRevision) ?? 0)
     }
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(retentionPolicy.externalRawValue, forKey: .retentionPolicy)
         try values.encode(transcriptionEnabled, forKey: .transcriptionEnabled)
         try values.encode(transcriptionLocaleIdentifier, forKey: .transcriptionLocaleIdentifier)
+        try values.encode(watchRecording, forKey: .watchRecording)
+        try values.encode(watchRecordingRevision, forKey: .watchRecordingRevision)
     }
 }
 

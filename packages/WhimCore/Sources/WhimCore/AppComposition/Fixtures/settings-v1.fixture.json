@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "preferences": { "retentionPolicy": "thirty_days", "transcriptionEnabled": true, "transcriptionLocaleIdentifier": null },
+  "preferences": { "retentionPolicy": "thirty_days", "transcriptionEnabled": true, "transcriptionLocaleIdentifier": null, "watchRecording": { "autoStopEnabled": true, "silenceDurationSeconds": 3 }, "watchRecordingRevision": 0 },
   "webhook": null,
-  "watch": { "availability": "unavailable", "lastSynchronizedAt": null, "resetState": "unavailable" },
+  "watch": { "availability": "unavailable", "lastSynchronizedAt": null, "resetState": "unavailable", "recordingPreferencesState": "unavailable" },
   "onboardingCompleted": false,
   "permissions": { "microphone": "not_determined", "speech": "denied", "notifications": "granted" }
 }

@@ -115,7 +115,7 @@ struct SettingsSectionView: View {
         _editor = State(initialValue: SettingsEditor(client: model.client, preferences: settings.preferences))
         _errorLog = State(initialValue: WebhookErrorLog(client: model.client))
     }
-    private var isEditable: Bool { [.webhook, .audio, .titles].contains(section) }
+    private var isEditable: Bool { [.webhook, .audio, .titles, .watch].contains(section) }
     var body: some View {
         WhimContent(spacing: WhimSpacing.group) {
             content
@@ -175,6 +175,13 @@ struct SettingsSectionView: View {
             footnote("Choose whether notification previews show Note titles on the Lock Screen in system Settings → Notifications → Whim → Show Previews.")
             Button("Notification preview settings", systemImage: "bell.badge") { systemSettings() }.whimGlassButton()
         case .watch:
+            WatchRecordingControls(autoStopEnabled: $editor.watchAutoStopEnabled,
+                silenceDurationSeconds: $editor.watchSilenceDurationSeconds)
+            footnote("After you speak, Whim stops, saves, and sends when it detects silence. Applies to Apple Watch recordings.")
+            Text(watchRecordingSynchronization)
+                .font(.footnote).foregroundStyle(.secondary)
+                .accessibilityIdentifier("watch-recording-sync-status")
+            Divider()
             Text("Watch synchronization \(settings.watch.availability).")
             footnote("Last synchronized: \(settings.watch.lastSynchronizedAt.map(TimelineFormat.date) ?? "Not yet synchronized")")
             if settings.watch.resetState == "pending" {
@@ -184,6 +191,14 @@ struct SettingsSectionView: View {
                 Text("Reset completed on both devices.").foregroundStyle(.secondary)
             }
             footnote("A disconnected Watch cannot be erased immediately.")
+        }
+    }
+    private var watchRecordingSynchronization: String {
+        if editor.isDirty { return "Save to update your Apple Watch." }
+        switch settings.watch.recordingPreferencesState {
+        case "synchronized": return "Recording settings synchronized."
+        case "pending": return "Recording settings will sync with your Apple Watch."
+        default: return "Recording settings will sync when your Apple Watch is available."
         }
     }
     private func sectionShortcut(_ target: SettingsSection, label: String) -> some View {
@@ -242,6 +257,40 @@ struct SettingsSectionView: View {
     private func systemSettings() { Task { await model.perform { try await model.client.openSystemSettings() } } }
 }
 
+/// The same native controls are used in Settings and the update onboarding screen.
+struct WatchRecordingControls: View {
+    @Binding var autoStopEnabled: Bool
+    @Binding var silenceDurationSeconds: Int
+
+    var body: some View {
+        Group {
+            Toggle("Auto-stop after silence", isOn: $autoStopEnabled)
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("watch-auto-stop-enabled")
+            VStack(alignment: .leading, spacing: WhimSpacing.field) {
+                WhimLabeledValue {
+                    Text("Silence duration")
+                } value: {
+                    Text("\(silenceDurationSeconds) seconds").monospacedDigit()
+                }
+                Slider(value: Binding(
+                    get: { Double(silenceDurationSeconds) },
+                    set: { silenceDurationSeconds = Int($0.rounded()) }),
+                    in: 2...10, step: 1) {
+                    Text("Silence duration")
+                } minimumValueLabel: {
+                    Text("2 s")
+                } maximumValueLabel: {
+                    Text("10 s")
+                }
+                .frame(minHeight: 44)
+                .disabled(!autoStopEnabled)
+                .accessibilityValue("\(silenceDurationSeconds) seconds")
+                .accessibilityIdentifier("watch-silence-duration")
+            }
+        }
+    }
+}
 /// Shared by Settings and release announcements so both edit the same preference draft.
 struct AudioRetentionControl: View {
     @Bindable var editor: SettingsEditor

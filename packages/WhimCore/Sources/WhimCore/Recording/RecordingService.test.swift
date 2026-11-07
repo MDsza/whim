@@ -3,6 +3,163 @@ import XCTest
 @testable import WhimCore
 
 final class RecordingServiceTests: XCTestCase {
+    // Break: manual Stop duplicates a finalization already started by silence auto-stop.
+    func testAutomaticAndManualStopJoinOneNote() async throws {
+        let h = RecordingHarness()
+        _ = try await h.service.start(source: .appleWatch, autoStop: .default)
+        for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        for tick in 3...40 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.waitUntilStopStarts()
+        let requested = expectation(description: "manual Stop submitted during automatic finalization")
+        let stopping = Task {
+            requested.fulfill()
+            return try await h.service.stop()
+        }
+        await fulfillment(of: [requested], timeout: 1)
+        await h.recorder.emit(.encoderCompleted(duration: 4, peakPowerDBFS: -20))
+        let note = try await stopping.value
+        XCTAssertNotNil(note)
+        let count = await h.store.noteCount
+        XCTAssertEqual(count, 1)
+        let stops = await h.recorder.stopCount
+        XCTAssertEqual(stops, 1)
+    }
+
+    // Break: an obsolete session-owned automatic command finalizes a subsequent capture.
+    func testDelayedAutomaticStopCannotFinalizeTheNextSession() async throws {
+        let h = RecordingHarness()
+        let first = try await h.service.start(source: .appleWatch, autoStop: .default)
+        await h.recorder.completeOnStop(duration: 4, peakPowerDBFS: -20)
+        for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        for tick in 3...33 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.waitUntilStopStarts()
+        // Discard joins automatic finalization once it already owns the encoder.
+        try await h.service.discard()
+        let second = try await h.service.start(source: .appleWatch, autoStop: .default)
+        let obsolete = try await h.service.stop(sessionID: first.sessionID)
+        XCTAssertNil(obsolete)
+        let active = await h.service.snapshot()
+        XCTAssertEqual(active?.sessionID, second.sessionID)
+        let count = await h.store.noteCount
+        XCTAssertEqual(count, 1)
+        try await h.service.discard()
+    }
+
+    // Break: discard or an earlier session's arming causes a later silent capture to become a Note.
+    func testDiscardAndNewSessionClearTheSilenceDetector() async throws {
+        let h = RecordingHarness()
+        let events = await h.service.events()
+        _ = try await h.service.start(source: .appleWatch, autoStop: .default)
+        for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        await h.recorder.emit(.elapsed(1))
+        await assertNextEvent(.elapsed(1), from: events)
+        try await h.service.discard()
+        let second = try await h.service.start(source: .appleWatch, autoStop: .default)
+        for tick in 0...40 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.emit(.elapsed(4))
+        await assertNextEvent(.elapsed(4), from: events)
+        let active = await h.service.snapshot()
+        XCTAssertEqual(active?.sessionID, second.sessionID)
+        let count = await h.store.noteCount
+        XCTAssertEqual(count, 0)
+        try await h.service.discard()
+    }
+
+    // Break: noise, missing samples or another session's speech arms an early stop.
+    func testSilenceDoesNotStopUnarmedDisabledPhoneOrDiscontinuousCapture() async throws {
+        let voice = (0...2).map { RecordingEvent.meter(elapsed: Double($0) / 10, peakPowerDBFS: -20) }
+        let quiet = (3...40).map { RecordingEvent.meter(elapsed: Double($0) / 10, peakPowerDBFS: -60) }
+        let cases: [(CaptureSource, WatchRecordingPreferences, [RecordingEvent])] = [
+            (.appleWatch, .default, quiet),
+            (.appleWatch, .default, [.meter(elapsed: 0.2, peakPowerDBFS: -20)] + quiet),
+            (.appleWatch, .init(autoStopEnabled: false, silenceDurationSeconds: 3), voice + quiet),
+            (.iphone, .default, voice + quiet),
+            (.appleWatch, .default, voice + Array(quiet.prefix(10)) + [.meter(elapsed: 30, peakPowerDBFS: -60)]),
+            (.appleWatch, .default, voice + Array(quiet.prefix(10)) + [.meter(elapsed: 1.3, peakPowerDBFS: .nan)] + Array(quiet.suffix(20))),
+            (.appleWatch, .default, voice + Array(quiet.prefix(10)) + [.routeChanged] + Array(quiet.suffix(20))),
+            (.appleWatch, .default, voice + [.meter(elapsed: 0, peakPowerDBFS: -60)] + quiet),
+        ]
+        for (source, preference, samples) in cases {
+            let h = RecordingHarness()
+            let events = await h.service.events()
+            _ = try await h.service.start(source: source, autoStop: preference)
+            for sample in samples { await h.recorder.emit(sample) }
+            await h.recorder.emit(.elapsed(42))
+            // routeChanged remains visible at the public service seam.
+            if samples.contains(.routeChanged) { await assertNextEvent(.routeChanged, from: events) }
+            await assertNextEvent(.elapsed(42), from: events)
+            let active = await h.service.snapshot()
+            XCTAssertNotNil(active, "Capture must continue for \(samples)")
+            try await h.service.discard()
+        }
+    }
+
+    // Break: the configured endpoints are ignored, or a pause survives resumed audio.
+    func testSilenceDurationEndpointsRestartAfterResumedAudio() async throws {
+        for seconds in [2, 10] {
+            let h = RecordingHarness()
+            let events = await h.service.events()
+            _ = try await h.service.start(source: .appleWatch,
+                autoStop: .init(autoStopEnabled: true, silenceDurationSeconds: seconds))
+            await h.recorder.completeOnStop(duration: 20, peakPowerDBFS: -20)
+            for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+            for tick in 3...(seconds * 10) { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+            await h.recorder.emit(.meter(elapsed: Double(seconds) + 0.1, peakPowerDBFS: -30))
+            for tick in 0..<(seconds * 10) {
+                await h.recorder.emit(.meter(elapsed: Double(seconds) + 0.2 + Double(tick) / 10, peakPowerDBFS: -60))
+            }
+            await h.recorder.emit(.elapsed(42))
+            await assertNextEvent(.elapsed(42), from: events)
+            let active = await h.service.snapshot()
+            XCTAssertNotNil(active)
+            await h.recorder.emit(.meter(elapsed: Double(seconds * 2) + 0.2, peakPowerDBFS: -60))
+            let completed = expectation(description: "selected silence duration finalizes")
+            let reading = Task {
+                for await event in events {
+                    if case .finalized(let note) = event {
+                        XCTAssertNotNil(note)
+                        completed.fulfill()
+                        break
+                    }
+                }
+            }
+            await fulfillment(of: [completed], timeout: 1)
+            reading.cancel()
+            try await h.service.discard()
+        }
+    }
+
+    // Break: Watch capture remains active after speech and the selected quiet interval.
+    func testWatchSilenceFinalizesAtConfiguredDurationAfterMeaningfulAudio() async throws {
+        let h = RecordingHarness()
+        let events = await h.service.events()
+        let session = try await h.service.start(source: .appleWatch, autoStop: .default)
+        await h.recorder.completeOnStop(duration: 4, peakPowerDBFS: -20)
+        for tick in 0...2 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -20)) }
+        for tick in 3...32 { await h.recorder.emit(.meter(elapsed: Double(tick) / 10, peakPowerDBFS: -60)) }
+        await h.recorder.emit(.elapsed(3.2))
+        await assertNextEvent(.elapsed(3.2), from: events)
+        let stillActive = await h.service.snapshot()
+        XCTAssertEqual(stillActive?.sessionID, session.sessionID, "2.9 quiet seconds must not stop capture")
+        await h.recorder.emit(.meter(elapsed: 3.3, peakPowerDBFS: -60))
+        let finalized = expectation(description: "silence finalizes a Note")
+        let reading = Task {
+            for await event in events {
+                if case .finalized(let note) = event {
+                    XCTAssertEqual(note?.id, session.noteID)
+                    XCTAssertEqual(note?.captureOutcome, .completed)
+                    finalized.fulfill()
+                    break
+                }
+            }
+        }
+        await fulfillment(of: [finalized], timeout: 1)
+        reading.cancel()
+        let active = await h.service.snapshot()
+        XCTAssertNil(active)
+        try await h.service.discard()
+    }
+
     // Break: a second Record invocation creates another Recording Session instead of focusing the active one.
     func testSecondStartFocusesExistingRecording() async throws {
         let harness = RecordingHarness()

@@ -112,7 +112,7 @@ public actor WhimService: WhimClient {
             if try await self.peer?.recoverReset() == true {
                 try await self.background.replace(with: nil)
                 await self.delivery.cancelNotifications()
-                try await self.preferences.reset()
+                if self.peer?.managesPreferences != true { try await self.preferences.reset() }
                 await self.onboarding.reset()
                 self.publish(.notesReset)
             }
@@ -196,6 +196,7 @@ public actor WhimService: WhimClient {
         let task = Task {
             // Replay old peer mutations before validation; reset was handled during preparation.
             try await self.peer?.recoverPreparedState()
+            try? await self.synchronizeWatchRecordingPreferences()
             let inventory = try await self.recovery.inventory()
             try await self.recovery.scan(inventory)
             try await self.resumeEligibleNotes()
@@ -238,6 +239,7 @@ public actor WhimService: WhimClient {
         let changed: NoteID?
         switch event {
         case .activated:
+            try? await synchronizeWatchRecordingPreferences()
             try await peer.activated(); publish(.settingsChanged); return
         case .transferFailed(let id):
             try await peer.retryTransfer(id); return
@@ -326,7 +328,8 @@ public actor WhimService: WhimClient {
         let permission = await permissions.status(.microphone)
         guard permission == .granted || permission == .unavailable else { throw WhimServiceError.permissionDenied }
         await playback.stop()
-        let projection = RecordingProjection(try await recording.start(source: source))
+        let autoStop = source == .appleWatch ? (try? await preferences.load().watchRecording) ?? .default : nil
+        let projection = RecordingProjection(try await recording.start(source: source, autoStop: autoStop))
         publish(.recordingStarted, recording: projection)
         return projection
     }
@@ -487,9 +490,27 @@ public actor WhimService: WhimClient {
     }
 
     public func updatePreferences(_ input: PreferenceInput) async throws {
+        try input.watchRecording.validate()
         try await launch(); await beginCommand(); defer { endCommand() }
-        try await preferences.save(input)
+        let saved = try await preferences.load()
+        var revision = saved.watchRecordingRevision
+        if device == .iphone, input.watchRecording != saved.watchRecording {
+            let next = revision.addingReportingOverflow(1)
+            guard !next.overflow else { throw WhimServiceError.setupRequired("Watch settings revision is exhausted.") }
+            revision = next.partialValue
+        }
+        try await preferences.save(input.replacingWatchRecording(input.watchRecording, revision: revision))
+        // Saving is local. The persisted record repairs an interrupted enqueue on launch/activation.
+        try? await synchronizeWatchRecordingPreferences()
+        publish(.settingsChanged)
         try await runRetention()
+    }
+
+    private func synchronizeWatchRecordingPreferences() async throws {
+        guard device == .iphone, let peer, peer.managesPreferences else { return }
+        let input = try await preferences.load()
+        try await peer.queueWatchRecordingPreferences(.init(revision: input.watchRecordingRevision,
+            preferences: input.watchRecording))
     }
 
     public func settings() async throws -> SettingsProjection {
@@ -499,13 +520,15 @@ public actor WhimService: WhimClient {
         async let notifications = permissions.status(.notifications)
         async let input = preferences.load()
         async let completed = onboarding.isComplete()
-        async let watch = peer?.status() ?? .unavailable
+        let inputValue = try await input
+        let watch = try await peer?.status(recordingPreferencesRevision:
+            peer?.managesPreferences == true ? inputValue.watchRecordingRevision : nil) ?? .unavailable
         var webhook: WebhookSettingsProjection?
         if let revision = try await store.latestConfigurationRevision(),
            let secrets = try await credentials.credentials(for: revision.id) {
             webhook = .init(revision: revision, credentials: secrets)
         }
-        return try await .init(preferences: input, webhook: webhook,
+        return await .init(preferences: inputValue, webhook: webhook,
             onboardingCompleted: completed, permissions: .init(
                 microphone: microphone, speech: speech, notifications: notifications), watch: watch)
     }
@@ -899,7 +922,7 @@ public enum WhimProductionComposition {
         #endif
         let peer = try ConnectivityMergeService(store: store, files: files,
             databaseURL: root.appendingPathComponent("whim.sqlite"), root: root.appendingPathComponent("Peer"),
-            device: deliveryDevice, credentials: credentials, transport: peerTransport)
+            device: deliveryDevice, credentials: credentials, transport: peerTransport, preferences: preferences)
         var playback: any PlaybackAdapter = SystemPlaybackAdapter()
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-WhimPlaybackFailureOnce") {

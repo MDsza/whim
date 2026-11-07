@@ -2,6 +2,25 @@ import XCTest
 
 @MainActor
 final class WatchRecordingUITests: XCTestCase {
+    func testSpeechThenSilenceSavesAndSendsWithoutTappingStop() async throws {
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["WHIM_WATCH_WEBHOOK_URL"])
+        var reset = URLRequest(url: URL(string: base + "/reset")!)
+        reset.httpMethod = "POST"
+        _ = try await URLSession.shared.data(for: reset)
+        let app = XCUIApplication()
+        app.launchArguments = WatchUITestConfiguration.arguments + ["-WhimWatchConfigured",
+            "-WhimFixtureWebhookURL", base + "/receive", "-WhimFixtureMeterSequence", "speech-then-silence"]
+        app.launch()
+        XCTAssertTrue(app.buttons["watch-record"].waitForExistence(timeout: 20), "Silence must return capture to idle")
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["Sent"].waitForExistence(timeout: 10))
+        let (data, _) = try await URLSession.shared.data(from: URL(string: base + "/state")!)
+        let state = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let received = try XCTUnwrap(state["received"] as? [[String: Any]])
+        XCTAssertEqual(received.count, 1)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "watch-note-")).count, 1)
+    }
+
     // Exercise the controls targeted by the primary hand gesture. Actual finger
     // recognition is covered in physical/watch-capture.e2e.test.md: watchOS 27
     // simulator gesture injection also fails for a plain primary-action Button.

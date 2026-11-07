@@ -6,7 +6,7 @@ import WhimCore
 public struct AppUpdate: Identifiable, Equatable, Sendable {
     public enum Section: Equatable, Sendable {
         case information(title: String, detail: String)
-        case quickCaptureGuide, onDeviceTitles, audioRetention
+        case quickCaptureGuide, onDeviceTitles, audioRetention, watchRecording
     }
     public let id: String
     public let title: String
@@ -18,11 +18,13 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
     }
 
     /// Select release content here. Keep the ID stable until a new announcement is intended.
-    public static let current = AppUpdate(id: "quick-capture-v1", title: "What’s new in Whim",
-        detail: "Capture a thought without opening the app. Set up quick access on your iPhone.",
-        sections: [.quickCaptureGuide])
+    public static let current = AppUpdate(id: "watch-silence-v1", title: "Hands-free Notes on Apple Watch",
+        detail: "After you speak, Whim can stop, save, and send your Note when it detects silence.",
+        sections: [.watchRecording])
 
-    public var hasPreferenceControls: Bool { sections.contains(.onDeviceTitles) || sections.contains(.audioRetention) }
+    public var hasPreferenceControls: Bool {
+        sections.contains(.onDeviceTitles) || sections.contains(.audioRetention) || sections.contains(.watchRecording)
+    }
 }
 
 /// Owns the update presentation's durable eligibility and optional settings draft.
@@ -66,6 +68,10 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
             let settings = try await client.settings()
             guard generation == revision, !Task.isCancelled else { return }
             editor = SettingsEditor(client: client, preferences: settings.preferences)
+            if update.sections.contains(.watchRecording) {
+                editor?.watchAutoStopEnabled = WatchRecordingPreferences.default.autoStopEnabled
+                editor?.watchSilenceDurationSeconds = WatchRecordingPreferences.default.silenceDurationSeconds
+            }
             originalPreferences = settings.preferences
         } catch is CancellationError {} catch {
             if generation == revision { loadError = IPhoneError(error) }
@@ -90,7 +96,11 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
                         ? editor.retentionPolicy : latest.retentionPolicy,
                     transcriptionEnabled: update.sections.contains(.onDeviceTitles) && editor.transcriptionEnabled != original.transcriptionEnabled
                         ? editor.transcriptionEnabled : latest.transcriptionEnabled,
-                    transcriptionLocaleIdentifier: latest.transcriptionLocaleIdentifier)
+                    transcriptionLocaleIdentifier: latest.transcriptionLocaleIdentifier,
+                    watchRecording: update.sections.contains(.watchRecording)
+                        ? .init(autoStopEnabled: editor.watchAutoStopEnabled, silenceDurationSeconds: editor.watchSilenceDurationSeconds)
+                        : latest.watchRecording,
+                    watchRecordingRevision: latest.watchRecordingRevision)
                 if input != latest { try await client.updatePreferences(input) }
             } catch is CancellationError { return } catch {
                 if generation == revision { loadError = IPhoneError(error) }

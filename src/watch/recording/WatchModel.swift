@@ -167,10 +167,7 @@ final class WatchModel {
         lastCaptureCommand = .stop
         await performCapture {
             _ = try await self.client.stopRecording()
-            self.recording = nil
-            self.peakPowerDBFS = -160
-            self.recordingTone = 0
-            self.haptic(.stop)
+            self.finishCapturePresentation()
             Task { await self.refreshNotes() }
         }
     }
@@ -178,11 +175,15 @@ final class WatchModel {
         lastCaptureCommand = .discard
         await performCapture {
             try await self.client.discardRecording()
-            self.recording = nil
-            self.peakPowerDBFS = -160
-            self.recordingTone = 0
-            self.haptic(.stop)
+            self.finishCapturePresentation()
         }
+    }
+    private func finishCapturePresentation() {
+        let wasRecording = recording != nil
+        recording = nil
+        peakPowerDBFS = -160
+        recordingTone = 0
+        if wasRecording { haptic(.stop) }
     }
     func isActing(on id: NoteID) -> Bool { noteActions[id] != nil }
     func isDeleting(_ id: NoteID) -> Bool { noteActions[id]?.action == .delete }
@@ -266,9 +267,7 @@ final class WatchModel {
                     self.recordingTone = 0
                 case .recordingStopped, .recordingDiscarded:
                     self.captureRevision += 1
-                    self.recording = nil
-                    self.peakPowerDBFS = -160
-                    self.recordingTone = 0
+                    self.finishCapturePresentation()
                 case .recordingProgress:
                     if let elapsed = event.elapsedSeconds { self.elapsed = elapsed }
                     if let power = event.peakPowerDBFS { self.peakPowerDBFS = Double(power) }

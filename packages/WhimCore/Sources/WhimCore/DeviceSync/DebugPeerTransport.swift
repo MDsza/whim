@@ -25,7 +25,7 @@ public final class DebugPeerTransport: PeerTransport, @unchecked Sendable {
         }
         guard arguments.indices.contains(index + 1),
               ["file-first", "state-first", "receipt-first", "failure-first", "interrupted-pending", "resend-interrupted",
-               "pending-audio", "pending-sent", "sync-failure", "sync-repair"].contains(arguments[index + 1]) else {
+               "pending-audio", "pending-sent", "sync-failure", "sync-repair", "watch-auto-stop-disabled"].contains(arguments[index + 1]) else {
             throw WhimServiceError.setupRequired("Unknown development peer scenario.")
         }
         let audio: URL
@@ -71,6 +71,11 @@ public final class DebugPeerTransport: PeerTransport, @unchecked Sendable {
     public func activate(receive: @escaping @Sendable (PeerEvent) -> Void) {
         lock.withLock { receiver = receive }
         receive(.activated)
+        if scenario == "watch-auto-stop-disabled" {
+            receive(.message(.init(generation: fixtureGeneration, payload: .watchRecordingPreferences(.init(
+                revision: 1, preferences: .init(autoStopEnabled: false, silenceDurationSeconds: 10))))))
+            return
+        }
         if isAudioSynchronizationScenario {
             let metadata = interruptedMetadata()
             receive(.message(metadata))

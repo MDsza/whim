@@ -1,9 +1,55 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+
+test('iPhone E2E boots a shutdown simulator before installing the app', async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'whim-e2e-shutdown-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const bin = join(root, 'bin');
+  await mkdir(bin);
+  await mkdir(join(root, 'scripts'));
+  for (const file of ['test-iphone-e2e.sh', 'apple-toolchain.sh', 'xcode-build-locations.sh',
+    'xcode-build-locations.mjs', 'restart-e2e-simulator.mjs', 'terminate-process-tree.mjs']) {
+    await copyFile(new URL(file, import.meta.url), join(root, 'scripts', file));
+  }
+  const fixtures = 'packages/WhimCore/Sources/WhimCore/WebhookConfiguration/Fixtures';
+  await mkdir(join(root, fixtures), { recursive: true });
+  await copyFile(new URL(`../${fixtures}/webhook-server.mjs`, import.meta.url), join(root, fixtures, 'webhook-server.mjs'));
+  const state = join(root, 'state');
+  const installed = join(root, 'installed');
+  await writeFile(state, 'shutdown');
+  const commands = {
+    xcrun: `#!/bin/sh
+case "$2" in
+shutdown) echo 'Unable to shutdown device in current state: Shutdown' >&2; exit 149 ;;
+boot) echo booting > "$WHIM_TEST_STATE" ;;
+bootstatus) echo ready > "$WHIM_TEST_STATE"; echo Finished ;;
+install) [ "$(cat "$WHIM_TEST_STATE")" = ready ] || { echo 'Unable to lookup in current state: Shutdown' >&2; exit 149; }; touch "$WHIM_TEST_INSTALLED" ;;
+esac
+`,
+    xcodebuild: `#!/bin/sh
+echo '[{"target":"whim","buildSettings":{"BUILD_DIR":"/fixture","PROJECT_TEMP_DIR":"/fixture/intermediates"}}]'
+`,
+    python3: '#!/bin/sh\nif [ \"$1\" = - ]; then exec /usr/bin/python3 \"$@\"; fi\nexit 0\n',
+    afconvert: '#!/bin/sh\nexit 0\n',
+    maestro: '#!/bin/sh\n[ -f "$WHIM_TEST_INSTALLED" ]\n',
+  };
+  for (const [name, body] of Object.entries(commands)) {
+    await writeFile(join(bin, name), body);
+    await chmod(join(bin, name), 0o755);
+  }
+  const result = spawnSync('bash', [join(root, 'scripts/test-iphone-e2e.sh')], {
+    encoding: 'utf8', timeout: 20000,
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, WHIM_IPHONE_SIMULATOR_UDID: 'fixture-iphone',
+      NODE_TEST_CONTEXT: undefined,
+      WHIM_IPHONE_E2E_SKIP_BUILD: '1', WHIM_TEST_STATE: state, WHIM_TEST_INSTALLED: installed },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(await readFile(state, 'utf8'), 'ready\n');
+});
 
 test('E2E startup closes the stale simulator session and waits for a fresh boot', async t => {
   const root = await mkdtemp(join(tmpdir(), 'whim-simulator-restart-'));

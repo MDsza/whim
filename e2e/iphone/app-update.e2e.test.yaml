@@ -14,9 +14,9 @@ appId: app.whim.ios
     visible:
       id: app-update-sheet
     timeout: 60000
-- assertVisible: What.s new in Whim
+- assertVisible: Hands-free Notes on Apple Watch
 - assertVisible:
-    id: quick-capture-setup
+    id: watch-recording-update
 - assertNotVisible: Step 4 of 4
 - openLink: whim://settings
 - runFlow:

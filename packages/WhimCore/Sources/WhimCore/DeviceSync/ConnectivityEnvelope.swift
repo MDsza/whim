@@ -22,6 +22,7 @@ public struct ConnectivityEnvelope: Codable, Equatable, Sendable {
         case acknowledgement(AcknowledgementTransfer)
         case audioRequest(AudioTransferRequest)
         case audioUnavailable(AudioTransferUnavailable)
+        case watchRecordingPreferences(WatchRecordingPreferencesTransfer)
     }
     public func encoded() throws -> Data { try PropertyListEncoder().encode(self) }
     public static func decode(_ data: Data) throws -> Self {
@@ -102,7 +103,7 @@ extension ConnectivityEnvelope.Payload {
         case .deletion(let id): id
         case .audioRequest(let request): request.noteID
         case .audioUnavailable(let response): response.noteID
-        case .reset, .acknowledgement, .configuration: nil
+        case .reset, .acknowledgement, .configuration, .watchRecordingPreferences: nil
         }
     }
 }
@@ -121,6 +122,7 @@ public enum AcknowledgementTransfer: Codable, Equatable, Sendable {
     case deletion(NoteID, AttemptDevice)
     case reset(AttemptDevice)
     case configuration(ConfigurationRevisionID)
+    case watchRecordingPreferences(UInt64)
     case durable(UUID)
 }
 

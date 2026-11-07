@@ -6,6 +6,23 @@ import WhimIPhone
 @testable import whim
 
 @MainActor final class IPhoneSpacingTests: XCTestCase {
+    func testWatchUpdateFitsStandardAndAccessibilityTextSizes() async throws {
+        let fixture = try WhimFacadeHarness()
+        defer { fixture.remove() }
+        let suite = "watch-update-render-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppUpdateModel(client: fixture.makeService(permissions: PermissionReviewFixture()), defaults: defaults)
+        model.prepare(onboardingCompleted: true)
+        await model.load()
+        for size in [DynamicTypeSize.large, .accessibility3] {
+            try await render("watch-update-\(size.isAccessibilitySize ? "large-text" : "standard")",
+                             size: size, navigation: false) {
+                AppUpdateView(model: model, update: .current)
+            }
+        }
+    }
+
     func testUpdateSectionsFitNarrowViewportsAtStandardAndAccessibilitySizes() async throws {
         let fixture = try WhimFacadeHarness()
         defer { fixture.remove() }

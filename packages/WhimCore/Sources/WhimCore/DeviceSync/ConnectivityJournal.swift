@@ -102,7 +102,7 @@ struct ConnectivityJournal: Sendable {
         try database.write { db in
             if durableOnly, let row = try Row.fetchOne(db, sql: "SELECT envelope, file FROM peer_outbox WHERE id = ?", arguments: [id.uuidString]) {
                 let envelope = try ConnectivityEnvelope.decode(row["envelope"])
-                switch envelope.payload { case .deletion, .reset: return; default: break }
+                switch envelope.payload { case .deletion, .reset, .watchRecordingPreferences: return; default: break }
                 let file: String? = row["file"]
                 if file != nil, let noteID = envelope.payload.noteID {
                     try Self.acceptAudioHandoff(noteID, generation: envelope.generation, db: db)
@@ -115,7 +115,12 @@ struct ConnectivityJournal: Sendable {
         try database.write { db in
             for data in try Data.fetchAll(db, sql: "SELECT envelope FROM peer_outbox WHERE submitted != 2") {
                 let envelope = try ConnectivityEnvelope.decode(data)
-                if envelope.generation == generation && envelope.payload == payload {
+                let superseded: Bool
+                if case .watchRecordingPreferences(let pending) = envelope.payload,
+                   case .watchRecordingPreferences(let applied) = payload {
+                    superseded = pending.revision <= applied.revision
+                } else { superseded = envelope.payload == payload }
+                if envelope.generation == generation && superseded {
                     try db.execute(sql: "UPDATE peer_outbox SET submitted = 2 WHERE id = ?", arguments: [envelope.messageID.uuidString])
                 }
             }
@@ -203,6 +208,11 @@ struct ConnectivityJournal: Sendable {
         try database.write { db in
             try db.execute(sql: "INSERT OR REPLACE INTO peer_state (key, value) VALUES (?, ?)",
                 arguments: [key, try PropertyListEncoder().encode(value)])
+        }
+    }
+    func clearWatchRecordingState() throws {
+        try database.write { db in
+            try db.execute(sql: "DELETE FROM peer_state WHERE key IN ('watchRecordingOutgoing', 'watchRecordingApplied', 'watchRecordingAcknowledged')")
         }
     }
     struct ResetState: Codable { let generation: ResetGeneration; let complete: Bool }
