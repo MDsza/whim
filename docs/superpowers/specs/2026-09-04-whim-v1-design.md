@@ -282,7 +282,7 @@ Onboarding:
 3. Request microphone permission.
 4. Stop finalizes AAC-LC mono audio in an `.m4a` container, creates the Note and Delivery, ends the Live Activity, and starts both v1 Steps.
 
-The current release announcement is “Hands-free Notes on Apple Watch”, selected by the stable announcement ID `watch-silence-v1` in the update framework below. It shows the same native toggle and 2–10-second slider as Settings → Apple Watch, initially enabled at 3 seconds. Opening it does not write settings. Continue saves the chosen Watch preferences through the existing facade, preserves other preferences, and dismisses only after a successful save; a failure keeps the draft available for retry. Not now dismisses without saving. Acknowledgement survives relaunch. Fresh onboarding covers the announcement without showing it. Presentation is deferred during capture, recording startup, history, navigation, or inactive scenes.
+The current release announcement is “Hands-free Notes on Apple Watch”, selected by the stable announcement ID `watch-silence-v1` in the update framework below. It shows the same native toggle and 2–10-second slider as Settings → Apple Watch, initially enabled at 3 seconds. Opening it does not write settings. Continue is its only completion action: it saves the chosen Watch preferences through the existing facade, preserves other preferences, and dismisses only after a successful save; a failure keeps the draft available for retry. Acknowledgement survives relaunch. Fresh onboarding covers the announcement without showing it. Presentation is deferred during capture, recording startup, history, navigation, or inactive scenes.
 
 Speech and notification permissions are optional and managed from the Permissions page in Settings. When any permission is missing and the user has never visited that page, the idle iPhone capture screen shows one Liquid Glass “Review permissions” button below explanatory text beneath Settings, leaving the logo visible. The reminder area scrolls at large text sizes to keep the logo unobstructed. Opening the page through any route records the visit locally and removes the reminder across launches, even if no permission is granted. Resetting Whim clears that visit. Denied permissions are not repeatedly requested; Settings provides the relevant system-settings route.
 
@@ -470,8 +470,7 @@ Existing installations receive deliberate release announcements in a sheet using
 onboarding layout, with release-specific acknowledgement independent of app versions.
 The current announcement contains the Watch silence toggle and slider; quick-capture, title, and retention sections remain available for other release announcements. Fresh installations
 mark their installed release's announcement as covered before onboarding can finish,
-so completing onboarding and relaunching never shows that announcement. Continue or
-Not now (or Skip for now for other announcement content) acknowledges an announcement; optional settings controls save drafts only
+so completing onboarding and relaunching never shows that announcement. Continue acknowledges the Watch announcement; other announcement content may also offer Skip for now. Optional settings controls save drafts only
 on Continue, and failed saves remain visible. Recording, history, navigation and inactive
 scenes defer presentation. See the [update onboarding design](2026-11-06-update-onboarding-design.md).
 

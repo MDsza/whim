@@ -26,9 +26,11 @@ struct AppUpdateView: View {
                 .buttonStyle(OnboardingPrimaryButtonStyle())
                 .disabled(update.hasPreferenceControls && model.editor == nil)
                 .accessibilityIdentifier("app-update-continue")
-            Button(update.sections.contains(.watchRecording) ? "Not now" : "Skip for now") { model.skip() }
-                .buttonStyle(OnboardingSecondaryButtonStyle())
-                .accessibilityIdentifier("app-update-skip")
+            if !update.sections.contains(.watchRecording) {
+                Button("Skip for now") { model.skip() }
+                    .buttonStyle(OnboardingSecondaryButtonStyle())
+                    .accessibilityIdentifier("app-update-skip")
+            }
         }
         .toggleStyle(SwitchToggleStyle(tint: Color(uiColor: .systemGreen)))
         .disabled(model.isPending)

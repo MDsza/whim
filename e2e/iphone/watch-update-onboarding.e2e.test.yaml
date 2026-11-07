@@ -12,6 +12,8 @@ appId: app.whim.ios
       id: watch-recording-update
     timeout: 60000
 - assertVisible: 3 seconds
+- assertNotVisible:
+    id: app-update-skip
 - waitForAnimationToEnd
 - takeScreenshot: watch-update-defaults
 - assertVisible:
@@ -48,7 +50,7 @@ appId: app.whim.ios
     timeout: 60000
 - assertNotVisible:
     id: watch-recording-update
-# Skipping the update must keep the default settings and also dismiss it permanently.
+# Continue also accepts the presented defaults and dismisses the update permanently.
 - launchApp:
     clearState: true
     arguments:
@@ -60,10 +62,7 @@ appId: app.whim.ios
     visible:
       id: watch-recording-update
     timeout: 60000
-- tapOn:
-    id: watch-auto-stop-enabled
-    point: 92%, 50%
-- tapOn: Not now
+- tapOn: Continue
 - extendedWaitUntil:
     visible:
       id: whim-home
