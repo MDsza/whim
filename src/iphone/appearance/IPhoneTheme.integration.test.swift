@@ -23,16 +23,15 @@ import WhimIPhone
         }
     }
 
-    func testUpdateSectionsFitNarrowViewportsAtStandardAndAccessibilitySizes() async throws {
+    func testQuickCaptureUpdateFitsNarrowViewportsAtStandardAndAccessibilitySizes() async throws {
         let fixture = try WhimFacadeHarness()
         defer { fixture.remove() }
         let suite = "update-render-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let update = AppUpdate(id: "render-update", title: "What’s new in Whim",
-            detail: "Review the changes and choose your preferences.",
-            sections: [.information(title: "Your Notes stay yours", detail: "Choose how Whim keeps and titles your Notes."),
-                       .onDeviceTitles, .audioRetention, .quickCaptureGuide])
+        let update = AppUpdate(id: "render-update", title: "Quick capture",
+            detail: "Set up your Action button.",
+            sections: [.quickCaptureGuide])
         let model = AppUpdateModel(client: fixture.makeService(), defaults: defaults, update: update)
         model.prepare(onboardingCompleted: true)
         await model.load()

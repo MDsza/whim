@@ -43,43 +43,11 @@ struct AppUpdateView: View {
 
     @ViewBuilder private func content(_ section: AppUpdate.Section) -> some View {
         switch section {
-        case .information(let title, let detail):
-            VStack(alignment: .leading, spacing: 12) {
-                Text(title).font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
-                Text(detail).font(.body).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         case .quickCaptureGuide:
             QuickCaptureSetupView()
-        case .onDeviceTitles:
-            if let editor = model.editor {
-                VStack(alignment: .leading, spacing: 12) {
-                    OnDeviceTitlesControl(editor: editor)
-                    Text("Only on-device recognition is used. No full transcript is stored.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            } else if model.error == nil { ProgressView("Loading title settings…") }
-        case .audioRetention:
-            if let editor = model.editor {
-                VStack(alignment: .leading, spacing: 12) {
-                    AudioRetentionControl(editor: editor)
-                    Text("Unsent and recovered Notes are always kept until you delete them.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            } else if model.error == nil { ProgressView("Loading audio settings…") }
         case .watchRecording:
             if let editor = model.editor {
-                VStack(alignment: .leading, spacing: 32) {
-                    WatchRecordingControls(autoStopEnabled: Binding(
-                        get: { editor.watchAutoStopEnabled }, set: { editor.watchAutoStopEnabled = $0 }),
-                        silenceDurationSeconds: Binding(
-                            get: { editor.watchSilenceDurationSeconds }, set: { editor.watchSilenceDurationSeconds = $0 }))
-                    Text("You can change this any time in Settings → Apple Watch.")
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("watch-recording-update")
+                AppUpdateWatchRecording(editor: editor)
             } else if model.error == nil { ProgressView("Loading Watch settings…") }
         }
     }
