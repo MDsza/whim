@@ -468,7 +468,7 @@ V1 is complete only when:
 
 Existing installations receive deliberate release announcements in a sheet using the
 onboarding layout, with release-specific acknowledgement independent of app versions.
-The current announcement contains the Watch silence toggle and slider; quick-capture, title, and retention sections remain available for other release announcements. Fresh installations
+The current announcement contains the Watch silence toggle and slider; the quick-capture guide remains available for other release announcements. Information, on-device title, and audio retention update sections have been removed; title and retention controls remain in Settings. Fresh installations
 mark their installed release's announcement as covered before onboarding can finish,
 so completing onboarding and relaunching never shows that announcement. Continue acknowledges the Watch announcement; other announcement content may also offer Skip for now. Optional settings controls save drafts only
 on Continue, and failed saves remain visible. Recording, history, navigation and inactive

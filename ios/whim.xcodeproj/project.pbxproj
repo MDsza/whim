@@ -85,6 +85,13 @@
 		E62EECE2D989C69ECFAEA70E /* IPhoneTheme.integration.test.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23EF097CE0133C19A384FF00 /* IPhoneTheme.integration.test.swift */; };
 		10943B85C7485DEEA992F9E0 /* action-button-setup.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 82548CB6C3A19D52242C1C32 /* action-button-setup.mp4 */; };
 		15D8C5F63070F0E1C93C9D4C /* action-button-preview.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 38A5E79713356B53419A876B /* action-button-preview.mp4 */; };
+		C7B085644966682C6A4EE289 /* OnboardingFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FFADCF3129123D34EEB0FB4 /* OnboardingFrame.swift */; };
+		D10D7563F84915E9F2ED25D5 /* OnboardingStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FABC672E46CC3A802D3B6CB7 /* OnboardingStyle.swift */; };
+		B48830F17DC939CB8C0C3CFA /* 01-OnboardingWelcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = B58DB8ECFE45A1D3D02E1BFF /* 01-OnboardingWelcome.swift */; };
+		9451907DFDCA495CA3A42DF0 /* 02-OnboardingWorkflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49612A5E879F19BD1F6286FB /* 02-OnboardingWorkflow.swift */; };
+		66893980D6270131C971A8A1 /* 03-OnboardingMicrophone.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F9121141A7837DEEBC0A007 /* 03-OnboardingMicrophone.swift */; };
+		84DA189010A3395DD821C492 /* 04-QuickCaptureSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72A5BCA5B12DF6686993C13D /* 04-QuickCaptureSetupView.swift */; };
+		29AC5A208F51827802FC8095 /* 01-AppUpdateWatchRecording.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2283295B7161A6CB62B2D4 /* 01-AppUpdateWatchRecording.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -231,6 +238,13 @@
 		23EF097CE0133C19A384FF00 /* IPhoneTheme.integration.test.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IPhoneTheme.integration.test.swift; path = ../src/iphone/appearance/IPhoneTheme.integration.test.swift; sourceTree = "<group>"; };
 		38A5E79713356B53419A876B /* action-button-preview.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; name = "action-button-preview.mp4"; path = "../assets/onboarding/action-button-preview.mp4"; sourceTree = "<group>"; };
 		82548CB6C3A19D52242C1C32 /* action-button-setup.mp4 */ = {isa = PBXFileReference; includeInIndex = 1; name = "action-button-setup.mp4"; path = "../assets/onboarding/action-button-setup.mp4"; sourceTree = "<group>"; };
+		7FFADCF3129123D34EEB0FB4 /* OnboardingFrame.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "OnboardingFrame.swift"; path = "../src/iphone/onboarding/OnboardingFrame.swift"; sourceTree = "<group>"; };
+		FABC672E46CC3A802D3B6CB7 /* OnboardingStyle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "OnboardingStyle.swift"; path = "../src/iphone/onboarding/OnboardingStyle.swift"; sourceTree = "<group>"; };
+		B58DB8ECFE45A1D3D02E1BFF /* 01-OnboardingWelcome.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "01-OnboardingWelcome.swift"; path = "../src/iphone/onboarding/pages/01-OnboardingWelcome.swift"; sourceTree = "<group>"; };
+		49612A5E879F19BD1F6286FB /* 02-OnboardingWorkflow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "02-OnboardingWorkflow.swift"; path = "../src/iphone/onboarding/pages/02-OnboardingWorkflow.swift"; sourceTree = "<group>"; };
+		8F9121141A7837DEEBC0A007 /* 03-OnboardingMicrophone.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "03-OnboardingMicrophone.swift"; path = "../src/iphone/onboarding/pages/03-OnboardingMicrophone.swift"; sourceTree = "<group>"; };
+		72A5BCA5B12DF6686993C13D /* 04-QuickCaptureSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "04-QuickCaptureSetupView.swift"; path = "../src/iphone/onboarding/pages/04-QuickCaptureSetupView.swift"; sourceTree = "<group>"; };
+		BF2283295B7161A6CB62B2D4 /* 01-AppUpdateWatchRecording.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "01-AppUpdateWatchRecording.swift"; path = "../src/iphone/onboarding/updates/01-AppUpdateWatchRecording.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -326,7 +340,14 @@
 				76C7E3809D0F888040984D00 /* WebhookConfigurationView.swift */,
 				AC8E0ADE9AD583BCE52324DF /* TimelineView.swift */,
 				937FF0FBB2E36229CE84E33C /* NoteRowView.swift */,
+				7FFADCF3129123D34EEB0FB4 /* OnboardingFrame.swift */,
+				FABC672E46CC3A802D3B6CB7 /* OnboardingStyle.swift */,
+				B58DB8ECFE45A1D3D02E1BFF /* 01-OnboardingWelcome.swift */,
+				49612A5E879F19BD1F6286FB /* 02-OnboardingWorkflow.swift */,
+				8F9121141A7837DEEBC0A007 /* 03-OnboardingMicrophone.swift */,
+				72A5BCA5B12DF6686993C13D /* 04-QuickCaptureSetupView.swift */,
 				CD88C1F69C08C67C67A5066D /* OnboardingView.swift */,
+				BF2283295B7161A6CB62B2D4 /* 01-AppUpdateWatchRecording.swift */,
 				F0FC6C4EC70D40DD9674A28F /* AppUpdateView.swift */,
 			);
 			name = WhimIPhone;
@@ -736,7 +757,14 @@
 				2574706D69D106062F52CD74 /* WebhookConfigurationView.swift in Sources */,
 				A7AF39ADD9FD06BDF0574FFE /* TimelineView.swift in Sources */,
 				FB441EFCAA789DF2C09691F6 /* NoteRowView.swift in Sources */,
+				C7B085644966682C6A4EE289 /* OnboardingFrame.swift in Sources */,
+				D10D7563F84915E9F2ED25D5 /* OnboardingStyle.swift in Sources */,
+				B48830F17DC939CB8C0C3CFA /* 01-OnboardingWelcome.swift in Sources */,
+				9451907DFDCA495CA3A42DF0 /* 02-OnboardingWorkflow.swift in Sources */,
+				66893980D6270131C971A8A1 /* 03-OnboardingMicrophone.swift in Sources */,
+				84DA189010A3395DD821C492 /* 04-QuickCaptureSetupView.swift in Sources */,
 				E3E3240E8E7EBAAA02409C6A /* OnboardingView.swift in Sources */,
+				29AC5A208F51827802FC8095 /* 01-AppUpdateWatchRecording.swift in Sources */,
 				252DC37214FDDD92DD62D47A /* AppUpdateView.swift in Sources */,
 				98EA31E378DB77E96CFAE6AF /* StopWhimRecordingIntent.swift in Sources */,
 				B06930122F428A53884E9A19 /* RecordWhimIntent.swift in Sources */,

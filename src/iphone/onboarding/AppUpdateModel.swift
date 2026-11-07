@@ -5,8 +5,7 @@ import WhimCore
 /// Deliberate announcements are independent of app versions and first-install onboarding.
 public struct AppUpdate: Identifiable, Equatable, Sendable {
     public enum Section: Equatable, Sendable {
-        case information(title: String, detail: String)
-        case quickCaptureGuide, onDeviceTitles, audioRetention, watchRecording
+        case quickCaptureGuide, watchRecording
     }
     public let id: String
     public let title: String
@@ -23,18 +22,17 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
         sections: [.watchRecording])
 
     public var hasPreferenceControls: Bool {
-        sections.contains(.onDeviceTitles) || sections.contains(.audioRetention) || sections.contains(.watchRecording)
+        sections.contains(.watchRecording)
     }
 }
 
-/// Owns the update presentation's durable eligibility and optional settings draft.
+/// Owns the update presentation's durable eligibility and optional Watch settings draft.
 @MainActor @Observable public final class AppUpdateModel {
     public private(set) var pendingUpdate: AppUpdate?
     public private(set) var editor: SettingsEditor?
     public private(set) var isPending = false
     public var error: IPhoneError? { loadError ?? editor?.error }
     private var loadError: IPhoneError?
-    private var originalPreferences: PreferenceInput?
     private let client: any WhimClient
     private let defaults: UserDefaults
     private let update: AppUpdate
@@ -72,7 +70,6 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
                 editor?.watchAutoStopEnabled = WatchRecordingPreferences.default.autoStopEnabled
                 editor?.watchSilenceDurationSeconds = WatchRecordingPreferences.default.silenceDurationSeconds
             }
-            originalPreferences = settings.preferences
         } catch is CancellationError {} catch {
             if generation == revision { loadError = IPhoneError(error) }
         }
@@ -85,21 +82,17 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
         let revision = generation
         isPending = true; loadError = nil
         defer { if generation == revision { isPending = false } }
-        if let editor, let original = originalPreferences {
+        if let editor {
             do {
                 // A retained draft may outlive a deep link into Settings. Apply only
                 // the controls actually edited here to the latest saved preferences.
                 let latest = try await client.settings().preferences
                 guard generation == revision, !Task.isCancelled else { return }
                 let input = PreferenceInput(
-                    retentionPolicy: update.sections.contains(.audioRetention) && editor.retentionPolicy != original.retentionPolicy
-                        ? editor.retentionPolicy : latest.retentionPolicy,
-                    transcriptionEnabled: update.sections.contains(.onDeviceTitles) && editor.transcriptionEnabled != original.transcriptionEnabled
-                        ? editor.transcriptionEnabled : latest.transcriptionEnabled,
+                    retentionPolicy: latest.retentionPolicy,
+                    transcriptionEnabled: latest.transcriptionEnabled,
                     transcriptionLocaleIdentifier: latest.transcriptionLocaleIdentifier,
-                    watchRecording: update.sections.contains(.watchRecording)
-                        ? .init(autoStopEnabled: editor.watchAutoStopEnabled, silenceDurationSeconds: editor.watchSilenceDurationSeconds)
-                        : latest.watchRecording,
+                    watchRecording: .init(autoStopEnabled: editor.watchAutoStopEnabled, silenceDurationSeconds: editor.watchSilenceDurationSeconds),
                     watchRecordingRevision: latest.watchRecordingRevision)
                 if input != latest { try await client.updatePreferences(input) }
             } catch is CancellationError { return } catch {
@@ -120,6 +113,6 @@ public struct AppUpdate: Identifiable, Equatable, Sendable {
     private func acknowledge() {
         var ids = covered
         if !ids.contains(update.id) { ids.append(update.id); defaults.set(ids, forKey: Self.coveredKey) }
-        pendingUpdate = nil; editor = nil; originalPreferences = nil; loadError = nil; isPending = false
+        pendingUpdate = nil; editor = nil; loadError = nil; isPending = false
     }
 }

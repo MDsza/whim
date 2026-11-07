@@ -291,7 +291,7 @@ struct WatchRecordingControls: View {
         }
     }
 }
-/// Shared by Settings and release announcements so both edit the same preference draft.
+/// Settings controls edit the preference draft until the user saves.
 struct AudioRetentionControl: View {
     @Bindable var editor: SettingsEditor
     var body: some View {

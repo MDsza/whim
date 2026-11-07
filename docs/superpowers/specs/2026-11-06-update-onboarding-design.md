@@ -26,11 +26,11 @@ For eligibility, a release-specific announcement identifier is preferable to eit
 
 Reuse the onboarding frame, typography, scrolling, buttons, accessibility behavior, and quick-capture guide. Update presentation has its own heading and no misleading onboarding step count.
 
-Compose release content from native SwiftUI sections. Support informational content, the existing setup guide, and settings controls backed by the existing settings interface. New releases can choose the sections they need without changing eligibility logic.
+Compose release content from native SwiftUI sections. Support the existing quick-capture setup guide and Watch recording controls backed by the existing settings interface. New releases can choose these sections without changing eligibility logic.
 
 Settings changes are drafts until the user continues. Save through the existing typed preferences interface; acknowledge only after a successful save. A skip action acknowledges the announcement without applying its draft. Failures remain visible and retryable.
 
-Proposed initial content: reuse the existing quick-capture setup announcement. Provide reusable preference controls for on-device titles and audio retention without changing their defaults or describing existing behavior as newly introduced.
+The current announcement uses Watch recording controls. Information, on-device title, and audio retention update sections were removed at the user’s request. Title and retention controls remain available in Settings.
 
 ## Constraints and non-goals
 

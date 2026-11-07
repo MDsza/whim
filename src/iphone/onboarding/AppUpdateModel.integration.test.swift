@@ -122,78 +122,68 @@ import WhimCore
         XCTAssertEqual(upgraded.pendingUpdate?.id, "later-update")
     }
 
-    func testContinueSavesPreferenceDraftBeforePersistingAcknowledgement() async throws {
+    func testContinueSavesOnlyWatchPreferencesBeforePersistingAcknowledgement() async throws {
         let harness = try WhimFacadeHarness()
         defer { harness.remove() }
         let preferences = try UserDefaultsPreferenceStore(suiteName: suite)
         let client = harness.makeService(preferences: preferences)
-        let update = AppUpdateModel(client: client, defaults: defaults, update: settingsUpdate)
+        let update = AppUpdateModel(client: client, defaults: defaults, update: watchSettingsUpdate)
         update.prepare(onboardingCompleted: true)
         await update.load()
         let editor = try XCTUnwrap(update.editor)
+        editor.watchAutoStopEnabled = false
+        editor.watchSilenceDurationSeconds = 10
         editor.transcriptionEnabled = false
         editor.retentionPolicy = .never
         XCTAssertEqual(try preferences.load(), .default, "Editing must not change saved defaults")
         await update.complete()
         XCTAssertNil(update.pendingUpdate)
         let saved = try preferences.load()
-        XCTAssertFalse(saved.transcriptionEnabled)
-        XCTAssertEqual(saved.retentionPolicy, .never)
-        let relaunched = AppUpdateModel(client: client, defaults: defaults, update: settingsUpdate)
+        XCTAssertEqual(saved.watchRecording, .init(autoStopEnabled: false, silenceDurationSeconds: 10))
+        XCTAssertTrue(saved.transcriptionEnabled)
+        XCTAssertEqual(saved.retentionPolicy, PreferenceInput.default.retentionPolicy)
+        let relaunched = AppUpdateModel(client: client, defaults: defaults, update: watchSettingsUpdate)
         relaunched.prepare(onboardingCompleted: true)
         XCTAssertNil(relaunched.pendingUpdate)
     }
 
     // Regression: a non-Watch announcement must not reset the new Watch preferences.
-    func testUnrelatedAnnouncementPreservesLatestWatchPreferences() async throws {
+    func testQuickCaptureAnnouncementPreservesLatestPreferences() async throws {
         let harness = try WhimFacadeHarness()
         defer { harness.remove() }
         let preferences = try UserDefaultsPreferenceStore(suiteName: suite)
         let client = harness.makeService(preferences: preferences)
-        let update = AppUpdateModel(client: client, defaults: defaults, update: settingsUpdate)
-        update.prepare(onboardingCompleted: true)
-        await update.load()
-        let editor = try XCTUnwrap(update.editor)
-        editor.transcriptionEnabled = false
-        try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: true, transcriptionLocaleIdentifier: nil,
-            watchRecording: .init(autoStopEnabled: false, silenceDurationSeconds: 10)))
-        await update.complete()
-        let saved = try preferences.load()
-        XCTAssertEqual(saved.watchRecording, .init(autoStopEnabled: false, silenceDurationSeconds: 10))
-        XCTAssertFalse(saved.transcriptionEnabled)
-    }
-
-    func testSkipDiscardsPreferenceDraftWithoutChangingSavedSettings() async throws {
-        let harness = try WhimFacadeHarness()
-        defer { harness.remove() }
-        let preferences = try UserDefaultsPreferenceStore(suiteName: suite)
-        let update = AppUpdateModel(client: harness.makeService(preferences: preferences), defaults: defaults, update: settingsUpdate)
-        update.prepare(onboardingCompleted: true)
-        await update.load()
-        let editor = try XCTUnwrap(update.editor)
-        editor.retentionPolicy = .never
-        update.skip()
-        XCTAssertEqual(try preferences.load(), .default)
-        XCTAssertNil(update.pendingUpdate)
-    }
-
-    func testContinuingDeferredAnnouncementPreservesNewerSettingsOutsideItsEditedControls() async throws {
-        let harness = try WhimFacadeHarness()
-        defer { harness.remove() }
-        let preferences = try UserDefaultsPreferenceStore(suiteName: suite)
-        let client = harness.makeService(preferences: preferences)
-        let announcement = AppUpdate(id: "titles-update", title: "Titles", detail: "Choose title generation.", sections: [.onDeviceTitles])
+        let announcement = AppUpdate(id: "quick-capture-update", title: "Quick capture", detail: "Set up your Action button.",
+                                     sections: [.quickCaptureGuide])
         let update = AppUpdateModel(client: client, defaults: defaults, update: announcement)
         update.prepare(onboardingCompleted: true)
         await update.load()
+        let latest = PreferenceInput(retentionPolicy: .never, transcriptionEnabled: false, transcriptionLocaleIdentifier: "es-ES",
+                                     watchRecording: .init(autoStopEnabled: false, silenceDurationSeconds: 10))
+        try await client.updatePreferences(latest)
+        let savedBeforeContinue = try preferences.load()
+        await update.complete()
+        XCTAssertEqual(try preferences.load(), savedBeforeContinue)
+        XCTAssertNil(update.pendingUpdate)
+    }
+
+    func testContinuingDeferredWatchAnnouncementPreservesNewerTitleAndRetentionSettings() async throws {
+        let harness = try WhimFacadeHarness()
+        defer { harness.remove() }
+        let preferences = try UserDefaultsPreferenceStore(suiteName: suite)
+        let client = harness.makeService(preferences: preferences)
+        let update = AppUpdateModel(client: client, defaults: defaults, update: watchSettingsUpdate)
+        update.prepare(onboardingCompleted: true)
+        await update.load()
         let editor = try XCTUnwrap(update.editor)
-        editor.transcriptionEnabled = false
+        editor.watchSilenceDurationSeconds = 10
         // Settings can be opened by a deep link while an announcement is deferred.
-        try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: true,
+        try await client.updatePreferences(.init(retentionPolicy: .never, transcriptionEnabled: false,
                                                 transcriptionLocaleIdentifier: "fr-FR"))
         await update.load()
         await update.complete()
         let saved = try preferences.load()
+        XCTAssertEqual(saved.watchRecording.silenceDurationSeconds, 10)
         XCTAssertFalse(saved.transcriptionEnabled)
         XCTAssertEqual(saved.retentionPolicy, .never)
         XCTAssertEqual(saved.transcriptionLocaleIdentifier, "fr-FR")
@@ -204,16 +194,16 @@ import WhimCore
         defer { harness.remove() }
         let preferences = UpdateFailingPreferences()
         let client = harness.makeService(preferences: preferences)
-        let update = AppUpdateModel(client: client, defaults: defaults, update: settingsUpdate)
+        let update = AppUpdateModel(client: client, defaults: defaults, update: watchSettingsUpdate)
         update.prepare(onboardingCompleted: true)
         await update.load()
         let editor = try XCTUnwrap(update.editor)
-        editor.retentionPolicy = .never
+        editor.watchSilenceDurationSeconds = 10
         await update.complete()
         XCTAssertNotNil(update.pendingUpdate)
         XCTAssertNotNil(update.error)
-        XCTAssertEqual(editor.retentionPolicy, .never)
-        let relaunched = AppUpdateModel(client: client, defaults: defaults, update: settingsUpdate)
+        XCTAssertEqual(editor.watchSilenceDurationSeconds, 10)
+        let relaunched = AppUpdateModel(client: client, defaults: defaults, update: watchSettingsUpdate)
         relaunched.prepare(onboardingCompleted: true)
         XCTAssertNotNil(relaunched.pendingUpdate)
         await preferences.allowSave()
@@ -225,11 +215,11 @@ import WhimCore
         let harness = try WhimFacadeHarness()
         defer { harness.remove() }
         let preferences = BlockingFacadePreferences()
-        let update = AppUpdateModel(client: harness.makeService(preferences: preferences), defaults: defaults, update: settingsUpdate)
+        let update = AppUpdateModel(client: harness.makeService(preferences: preferences), defaults: defaults, update: watchSettingsUpdate)
         update.prepare(onboardingCompleted: true)
         await update.load()
         let editor = try XCTUnwrap(update.editor)
-        editor.retentionPolicy = .never
+        editor.watchSilenceDurationSeconds = 10
         let saving = Task { await update.complete() }
         await preferences.waitUntilSaving()
         update.prepare(onboardingCompleted: false)
@@ -269,9 +259,9 @@ import WhimCore
         XCTAssertFalse(model.offersAppUpdate)
     }
 
-    private var settingsUpdate: AppUpdate {
-        AppUpdate(id: "settings-update", title: "Your preferences", detail: "Choose your settings.",
-                  sections: [.onDeviceTitles, .audioRetention])
+    private var watchSettingsUpdate: AppUpdate {
+        AppUpdate(id: "watch-settings-update", title: "Apple Watch", detail: "Choose your Watch settings.",
+                  sections: [.watchRecording])
     }
 }
 
