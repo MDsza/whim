@@ -1,5 +1,22 @@
 # @whim/app
 
+## 1.2.0
+
+### Minor Changes
+
+- 6aa4460: On iPhone, invoke Record a Whim again to stop and send the active recording from the Action button, Siri, or Lock Screen control.
+- 779daa2: Show existing users a one-time update sheet using the onboarding layout. Fresh installs skip announcements for their installed release. Release content supports setup guides, information, and optional settings controls without changing saved defaults until Continue.
+- 5606e3c: Automatically stop, save, and send Apple Watch recordings after speech followed by silence. Auto-stop is enabled by default with a 3-second delay. Adjust the delay from 2 to 10 seconds or disable it in Settings → Apple Watch; the Watch keeps its last synchronized choice while offline. Existing users see a one-time update screen with the suggested settings and can adjust them or skip setup.
+
+### Patch Changes
+
+- aa76f79: Preserve iPhone Debug App Intents metadata so Live Activity Stop runs in the recorder's app process. Validate built system surfaces before E2E and handle both Live Activity permission prompts. Avoid a simulator startup race when another client boots the device after shutdown.
+- aa76f79: Temporarily hide Lock Screen and Control Center setup guidance, finishing onboarding after microphone setup on iPhones without an Action button.
+  
+  Group shortcut guidance under Shortcuts in Settings, showing Configure action button only on supported iPhones. Keep Control Center, Lock Screen, and Apple Watch complication guidance hidden for now.
+- 7cb5ef3: Fit the Dynamic Island Stop circle within its expanded layout, refine the waveform stroke, and show the same voice-reactive controls on the Lock Screen.
+- c0a42cf: Keep the full Watch capture control available to touch and accessibility, and adapt Previous Notes spacing to the system toolbar height.
+
 ## 1.1.2
 
 ### Patch Changes

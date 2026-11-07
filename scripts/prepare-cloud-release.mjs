@@ -117,7 +117,7 @@ export async function prepareCloudRelease(root = process.cwd(), tag, options = {
       await writeFile(join(checkout, provenancePath), JSON.stringify({ tag, source: current.source, tagObject: current.tagObject, version }, null, 2) + '\n');
       await local('add', '--', ...versionFiles, ...changesets.map(name => `.changeset/${name}`));
       const tree = await local('write-tree');
-      const commit = await local('-c', 'user.name=Whim release preparation', '-c', 'user.email=release@users.noreply.github.com', 'commit-tree', tree, '-p', current.source, '-m', `chore(ios): prepare ${tag}`);
+      const commit = await local('-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com', 'commit-tree', tree, '-p', current.source, '-m', `chore(ios): prepare ${tag}`);
       await c.git('fetch', '--no-tags', checkout, commit);
       await c.verify(tag, { ...current, preparation: commit });
       const latest = await c.state(tag);

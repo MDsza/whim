@@ -27,6 +27,17 @@ const remote = (f, ...args) => command(f.root, 'git', ['--git-dir', f.remote, ..
 const prepare = async (f, opts = {}) => (await import('./prepare-cloud-release.mjs')).prepareCloudRelease(f.root, f.tag, { ...f.options, ...opts });
 const resume = async f => (await import('./prepare-cloud-release.mjs')).resumeCloudRelease(f.root, f.options);
 
+test('attributes release preparation commits to the reserved GitHub Actions bot', async t => {
+  const f = await fixture(t);
+  await prepare(f);
+  assert.deepEqual(remote(f, 'show', '-s', '--format=%an%n%ae%n%cn%n%ce', `release-preparation/${f.tag}`).split('\n'), [
+    'github-actions[bot]',
+    '41898282+github-actions[bot]@users.noreply.github.com',
+    'github-actions[bot]',
+    '41898282+github-actions[bot]@users.noreply.github.com',
+  ]);
+});
+
 for (const tag of ['1.0.1', 'v1.0.1']) {
   test(`prepares ${tag} on main and the cloud branch while preserving the original tag; duplicate events are no-ops`, async t => {
     const f = await fixture(t, tag);
