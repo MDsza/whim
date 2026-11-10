@@ -441,10 +441,12 @@ public actor ConnectivityMergeService {
         let appliedKey = device == .iphone ? "watchRecordingAcknowledged" : "watchRecordingApplied"
         let applied = try journal.read(appliedKey, as: [UInt64].self)?.first
         let preferenceState = expected.map { $0 == applied ? "synchronized" : "pending" } ?? "unavailable"
-        return WatchSettingsProjection(availability: transport?.isAvailable == true ? "available" : "unavailable",
+        let available = transport?.isAvailable == true
+        return WatchSettingsProjection(availability: available ? "available" : "unavailable",
             lastSynchronizedAt: try journal.read("lastSynchronizedAt", as: [Date].self)?.first,
             resetState: reset.generation == .initial ? "idle" : endpoints.count >= 2 ? "synchronized" : "pending",
-            recordingPreferencesState: preferenceState)
+            recordingPreferencesState: preferenceState,
+            availabilityReason: available ? nil : transport?.unavailabilityReason?.rawValue)
     }
 
     public func generation() throws -> ResetGeneration { try journal.resetState().generation }

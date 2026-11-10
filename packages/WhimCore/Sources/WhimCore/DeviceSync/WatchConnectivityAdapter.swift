@@ -6,6 +6,7 @@ public protocol WatchConnectivitySession: Sendable {
     var isAvailable: Bool { get }
     var isActivated: Bool { get }
     var isReachable: Bool { get }
+    var unavailabilityReason: PeerUnavailabilityReason? { get }
     func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void)
     func completeReceivedFile(_ url: URL) throws
     func transferUserInfo(_ data: Data) throws
@@ -13,7 +14,10 @@ public protocol WatchConnectivitySession: Sendable {
     func transferFile(_ url: URL, metadata: Data) throws
     func updateApplicationContext(_ data: Data, credentials: Data?) throws
 }
-public extension WatchConnectivitySession { func completeReceivedFile(_ url: URL) throws {} }
+public extension WatchConnectivitySession {
+    func completeReceivedFile(_ url: URL) throws {}
+    var unavailabilityReason: PeerUnavailabilityReason? { nil }
+}
 public enum ConnectivitySessionEvent: Sendable {
     case activated, data(Data), file(URL, Data), context(Data, Data?), failed(UUID)
 }
@@ -23,6 +27,7 @@ public final class WatchConnectivityAdapter: PeerTransport, Sendable {
     public init(session: any WatchConnectivitySession) { self.session = session }
     public var isAvailable: Bool { session.isAvailable }
     public var isActivated: Bool { session.isActivated }
+    public var unavailabilityReason: PeerUnavailabilityReason? { session.unavailabilityReason }
     public func activate(receive: @escaping @Sendable (PeerEvent) -> Void) {
         session.activate { event in
             do {
@@ -78,6 +83,14 @@ public final class SystemWatchConnectivitySession: NSObject, WatchConnectivitySe
         return isActivated && session.isPaired && session.isWatchAppInstalled
         #else
         return isActivated && session.isCompanionAppInstalled
+        #endif
+    }
+    public var unavailabilityReason: PeerUnavailabilityReason? {
+        guard WCSession.isSupported() else { return nil }
+        #if os(iOS)
+        return .resolve(activated: isActivated, paired: session.isPaired, counterpartInstalled: session.isWatchAppInstalled)
+        #else
+        return .resolve(activated: isActivated, paired: nil, counterpartInstalled: session.isCompanionAppInstalled)
         #endif
     }
     public var isReachable: Bool { isActivated && session.isReachable }

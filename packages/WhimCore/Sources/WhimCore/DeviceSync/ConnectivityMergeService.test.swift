@@ -3,6 +3,23 @@ import XCTest
 @testable import WhimCore
 
 final class ConnectivityProtocolTests: XCTestCase {
+    func testUnavailabilityNamesTheFirstMissingRequirement() throws {
+        XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: false, paired: false, counterpartInstalled: false), .inactive)
+        XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: true, paired: false, counterpartInstalled: false), .unpaired)
+        XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: true, paired: true, counterpartInstalled: false), .appNotInstalled)
+        XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: true, paired: nil, counterpartInstalled: false), .appNotInstalled)
+        XCTAssertNil(PeerUnavailabilityReason.resolve(activated: true, paired: true, counterpartInstalled: true))
+        // Older peers and stored projections carry no reason; an available Watch never encodes one.
+        let legacy = Data(#"{"availability":"unavailable","lastSynchronizedAt":null,"resetState":"idle"}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(WatchSettingsProjection.self, from: legacy).availabilityReason)
+        let explained = WatchSettingsProjection(availability: "unavailable", lastSynchronizedAt: nil, resetState: "idle",
+            availabilityReason: PeerUnavailabilityReason.appNotInstalled.rawValue)
+        let decoded = try JSONDecoder().decode(WatchSettingsProjection.self, from: JSONEncoder().encode(explained))
+        XCTAssertEqual(decoded.availabilityReason, "appNotInstalled")
+        let available = WatchSettingsProjection(availability: "available", lastSynchronizedAt: nil, resetState: "idle")
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(available), as: UTF8.self).contains("availabilityReason"))
+    }
+
     #if DEBUG
     func testInstalledFixtureLaunchesUseAnIsolatedPeerWhileOrdinaryLaunchUsesSystemPeer() throws {
         let fixture = URL(fileURLWithPath: "/fixture.m4a")

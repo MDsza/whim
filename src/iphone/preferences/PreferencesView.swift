@@ -183,6 +183,9 @@ struct SettingsSectionView: View {
                 .accessibilityIdentifier("watch-recording-sync-status")
             Divider()
             Text("Watch synchronization \(settings.watch.availability).")
+            if let explanation = watchUnavailabilityExplanation {
+                footnote(explanation).accessibilityIdentifier("watch-unavailability-reason")
+            }
             footnote("Last synchronized: \(settings.watch.lastSynchronizedAt.map(TimelineFormat.date) ?? "Not yet synchronized")")
             if settings.watch.resetState == "pending" {
                 Text("Reset pending on Apple Watch. It will finish after reconnection.").foregroundStyle(.secondary)
@@ -191,6 +194,14 @@ struct SettingsSectionView: View {
                 Text("Reset completed on both devices.").foregroundStyle(.secondary)
             }
             footnote("A disconnected Watch cannot be erased immediately.")
+        }
+    }
+    private var watchUnavailabilityExplanation: String? {
+        switch settings.watch.availabilityReason {
+        case "inactive": "The connection to your Apple Watch has not started yet. Close and reopen Whim."
+        case "unpaired": "No Apple Watch is paired with this iPhone."
+        case "appNotInstalled": "iOS reports that Whim is not installed on your Apple Watch. Install it from the Watch app on this iPhone. If it is already on your Watch, remove it there and install it again."
+        default: nil
         }
     }
     private var watchRecordingSynchronization: String {
