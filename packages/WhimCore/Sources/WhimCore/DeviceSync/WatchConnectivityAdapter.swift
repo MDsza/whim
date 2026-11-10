@@ -6,6 +6,9 @@ public protocol WatchConnectivitySession: Sendable {
     var isAvailable: Bool { get }
     var isActivated: Bool { get }
     var isReachable: Bool { get }
+    /// Encoded envelopes still held by the system, including queued transfers.
+    var outstandingUserInfo: [Data] { get }
+    var outstandingFileMetadata: [Data] { get }
     func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void)
     func completeReceivedFile(_ url: URL) throws
     func transferUserInfo(_ data: Data) throws
@@ -42,12 +45,19 @@ public final class WatchConnectivityAdapter: PeerTransport, Sendable {
     }
     public func completeReceivedFile(_ url: URL) throws { try session.completeReceivedFile(url) }
     public func transfer(_ envelope: ConnectivityEnvelope) throws {
+        guard session.isActivated else { throw ConnectivityError.inactiveSession }
         let data = try envelope.encoded()
-        try session.transferUserInfo(data)
+        if !OutstandingPeerTransfers.contain(data, in: session.outstandingUserInfo) {
+            try session.transferUserInfo(data)
+        }
         if session.isReachable { session.sendMessage(data) }
     }
     public func transferFile(at url: URL, metadata: ConnectivityEnvelope) throws {
-        try session.transferFile(url, metadata: metadata.encoded())
+        guard session.isActivated else { throw ConnectivityError.inactiveSession }
+        let data = try metadata.encoded()
+        if !OutstandingPeerTransfers.contain(data, in: session.outstandingFileMetadata) {
+            try session.transferFile(url, metadata: data)
+        }
     }
     public func updateContext(_ envelope: ConnectivityEnvelope, credentials: StoredWebhookCredentials?) throws {
         try session.updateApplicationContext(envelope.encoded(), credentials: credentials.map { try PropertyListEncoder().encode($0) })
@@ -57,7 +67,7 @@ public final class WatchConnectivityAdapter: PeerTransport, Sendable {
 /// WCSession keeps queued transfers until they are delivered, across launches. The journal
 /// is replayed on every activation and reachability change, so without this check each
 /// replay queued another copy of a message (and of its audio file) the system still held.
-enum OutstandingPeerTransfers {
+private enum OutstandingPeerTransfers {
     static func contain(_ message: Data, in queued: [Data]) -> Bool {
         guard let id = try? ConnectivityEnvelope.decode(message).messageID else { return false }
         return queued.contains { (try? ConnectivityEnvelope.decode($0).messageID) == id }
@@ -91,6 +101,12 @@ public final class SystemWatchConnectivitySession: NSObject, WatchConnectivitySe
         #endif
     }
     public var isReachable: Bool { isActivated && session.isReachable }
+    public var outstandingUserInfo: [Data] {
+        session.outstandingUserInfoTransfers.filter(\.isTransferring).compactMap { $0.userInfo["envelope"] as? Data }
+    }
+    public var outstandingFileMetadata: [Data] {
+        session.outstandingFileTransfers.filter(\.isTransferring).compactMap { $0.file.metadata?["envelope"] as? Data }
+    }
     public func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void) {
         lock.withLock { receiver = receive }
         guard WCSession.isSupported() else { return }
@@ -102,15 +118,11 @@ public final class SystemWatchConnectivitySession: NSObject, WatchConnectivitySe
     public func completeReceivedFile(_ url: URL) throws { try receivedFiles.complete(url) }
     public func transferUserInfo(_ data: Data) throws {
         guard isActivated else { throw ConnectivityError.inactiveSession }
-        let queued = session.outstandingUserInfoTransfers.filter(\.isTransferring).compactMap { $0.userInfo["envelope"] as? Data }
-        guard !OutstandingPeerTransfers.contain(data, in: queued) else { return }
         session.transferUserInfo(["envelope": data])
     }
     public func sendMessage(_ data: Data) { session.sendMessage(["envelope": data], replyHandler: nil, errorHandler: { _ in }) }
     public func transferFile(_ url: URL, metadata: Data) throws {
         guard isActivated else { throw ConnectivityError.inactiveSession }
-        let queued = session.outstandingFileTransfers.filter(\.isTransferring).compactMap { $0.file.metadata?["envelope"] as? Data }
-        guard !OutstandingPeerTransfers.contain(metadata, in: queued) else { return }
         session.transferFile(url, metadata: ["envelope": metadata])
     }
     public func updateApplicationContext(_ data: Data, credentials: Data?) throws {
