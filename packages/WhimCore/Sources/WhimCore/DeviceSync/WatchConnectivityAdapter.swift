@@ -54,6 +54,16 @@ public final class WatchConnectivityAdapter: PeerTransport, Sendable {
     }
 }
 
+/// WCSession keeps queued transfers until they are delivered, across launches. The journal
+/// is replayed on every activation and reachability change, so without this check each
+/// replay queued another copy of a message (and of its audio file) the system still held.
+enum OutstandingPeerTransfers {
+    static func contain(_ message: Data, in queued: [Data]) -> Bool {
+        guard let id = try? ConnectivityEnvelope.decode(message).messageID else { return false }
+        return queued.contains { (try? ConnectivityEnvelope.decode($0).messageID) == id }
+    }
+}
+
 #if canImport(WatchConnectivity) && (os(iOS) || os(watchOS))
 @preconcurrency import WatchConnectivity
 
@@ -92,11 +102,15 @@ public final class SystemWatchConnectivitySession: NSObject, WatchConnectivitySe
     public func completeReceivedFile(_ url: URL) throws { try receivedFiles.complete(url) }
     public func transferUserInfo(_ data: Data) throws {
         guard isActivated else { throw ConnectivityError.inactiveSession }
+        let queued = session.outstandingUserInfoTransfers.filter(\.isTransferring).compactMap { $0.userInfo["envelope"] as? Data }
+        guard !OutstandingPeerTransfers.contain(data, in: queued) else { return }
         session.transferUserInfo(["envelope": data])
     }
     public func sendMessage(_ data: Data) { session.sendMessage(["envelope": data], replyHandler: nil, errorHandler: { _ in }) }
     public func transferFile(_ url: URL, metadata: Data) throws {
         guard isActivated else { throw ConnectivityError.inactiveSession }
+        let queued = session.outstandingFileTransfers.filter(\.isTransferring).compactMap { $0.file.metadata?["envelope"] as? Data }
+        guard !OutstandingPeerTransfers.contain(metadata, in: queued) else { return }
         session.transferFile(url, metadata: ["envelope": metadata])
     }
     public func updateApplicationContext(_ data: Data, credentials: Data?) throws {

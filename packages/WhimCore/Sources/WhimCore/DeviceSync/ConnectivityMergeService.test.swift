@@ -3,6 +3,18 @@ import XCTest
 @testable import WhimCore
 
 final class ConnectivityProtocolTests: XCTestCase {
+    func testReplayedMessageIsNotQueuedAgainWhileTheSystemStillHoldsIt() throws {
+        let held = ConnectivityEnvelope(payload: .deletion(NoteID()))
+        let other = ConnectivityEnvelope(payload: .deletion(NoteID()))
+        // The journal re-encodes on replay; identity is the message, not its bytes.
+        let replayed = ConnectivityEnvelope(messageID: held.messageID, sentAt: held.sentAt.addingTimeInterval(1), payload: held.payload)
+        let queued = [try other.encoded(), try held.encoded(), Data("malformed".utf8)]
+        XCTAssertTrue(OutstandingPeerTransfers.contain(try replayed.encoded(), in: queued))
+        XCTAssertFalse(OutstandingPeerTransfers.contain(try ConnectivityEnvelope(payload: .reset).encoded(), in: queued))
+        XCTAssertFalse(OutstandingPeerTransfers.contain(try held.encoded(), in: []))
+        XCTAssertFalse(OutstandingPeerTransfers.contain(Data("malformed".utf8), in: queued), "Unreadable input is always sent")
+    }
+
     #if DEBUG
     func testInstalledFixtureLaunchesUseAnIsolatedPeerWhileOrdinaryLaunchUsesSystemPeer() throws {
         let fixture = URL(fileURLWithPath: "/fixture.m4a")
