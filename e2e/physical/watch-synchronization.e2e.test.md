@@ -60,5 +60,17 @@ counts and screenshots for each case. Do not enable DEBUG fixture switches.
    three-transfer cycle. Delete a pending Note on iPhone with confirmation and
    reconnect Watch: it disappears on both devices and delayed audio stays deleted.
 
-All seven cases block release until evidence is recorded. Simulator passes do not
+8. **Settings availability explanation:** on a test iPhone without a paired Watch,
+   open Settings → Apple Watch and confirm the explanation says no Watch is paired.
+   On a paired test device without the Watch app installed, confirm Settings explains
+   that iOS reports Whim missing and offers installation from the iPhone Watch app.
+   Install Whim and activate both apps; reopen Settings and confirm synchronization
+   is available and the explanation disappears. Disconnect the installed, activated
+   Watch without unpairing or uninstalling it; it must remain available even when
+   unreachable. If an inactive session is observed, confirm the reopen guidance.
+   Record screenshots and VoiceOver output. Automated coverage uses a fake system
+   session through the real adapter/service and `watch-unavailability.e2e.test.yaml`;
+   actual pairing, installation reporting, and activation require these devices.
+
+All eight cases block release until evidence is recorded. Simulator passes do not
 satisfy real transferFile, locked-device background execution, or paired race acceptance.

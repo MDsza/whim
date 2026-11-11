@@ -917,7 +917,7 @@ public enum WhimProductionComposition {
            let debugPeer = try DebugPeerTransport.from(arguments: arguments,
                 fixture: configurationTestFixtureURL(bundle: bundle)) {
             try debugPeer.prepare(root: root)
-            peerTransport = debugPeer
+            peerTransport = debugPeer.transport
         }
         #endif
         let peer = try ConnectivityMergeService(store: store, files: files,

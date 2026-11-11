@@ -9,6 +9,9 @@ final class ConnectivityProtocolTests: XCTestCase {
         XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: true, paired: true, counterpartInstalled: false), .appNotInstalled)
         XCTAssertEqual(PeerUnavailabilityReason.resolve(activated: true, paired: nil, counterpartInstalled: false), .appNotInstalled)
         XCTAssertNil(PeerUnavailabilityReason.resolve(activated: true, paired: true, counterpartInstalled: true))
+    }
+
+    func testWatchSettingsDecodeLegacyAndUnknownReasonsWithoutLosingCompatibility() throws {
         // Older peers and stored projections carry no reason; an available Watch never encodes one.
         let legacy = Data(#"{"availability":"unavailable","lastSynchronizedAt":null,"resetState":"idle"}"#.utf8)
         XCTAssertNil(try JSONDecoder().decode(WatchSettingsProjection.self, from: legacy).availabilityReason)
@@ -16,6 +19,9 @@ final class ConnectivityProtocolTests: XCTestCase {
             availabilityReason: PeerUnavailabilityReason.appNotInstalled.rawValue)
         let decoded = try JSONDecoder().decode(WatchSettingsProjection.self, from: JSONEncoder().encode(explained))
         XCTAssertEqual(decoded.availabilityReason, "appNotInstalled")
+        let future = Data(#"{"availability":"unavailable","availabilityReason":"futureSystemReason","resetState":"idle"}"#.utf8)
+        XCTAssertEqual(try JSONDecoder().decode(WatchSettingsProjection.self, from: future).availabilityReason,
+            "futureSystemReason")
         let available = WatchSettingsProjection(availability: "available", lastSynchronizedAt: nil, resetState: "idle")
         XCTAssertFalse(String(decoding: try JSONEncoder().encode(available), as: UTF8.self).contains("availabilityReason"))
     }

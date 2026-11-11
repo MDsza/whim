@@ -17,6 +17,11 @@ public final class DebugPeerTransport: PeerTransport, @unchecked Sendable {
     }
     public var isAvailable: Bool { scenario != "isolated" }
     public var isActivated: Bool { true }
+    /// Availability journeys retain the real adapter and replace only WCSession's response.
+    var transport: any PeerTransport {
+        scenario == "watch-app-not-installed"
+            ? WatchConnectivityAdapter(session: DebugWatchAppNotInstalledSession()) : self
+    }
     private init(scenario: String, fixture: URL) { self.scenario = scenario; self.fixture = fixture }
     public static func from(arguments: [String], fixture: URL) throws -> DebugPeerTransport? {
         guard let index = arguments.firstIndex(of: "-WhimPeerScenario") else {
@@ -25,7 +30,8 @@ public final class DebugPeerTransport: PeerTransport, @unchecked Sendable {
         }
         guard arguments.indices.contains(index + 1),
               ["file-first", "state-first", "receipt-first", "failure-first", "interrupted-pending", "resend-interrupted",
-               "pending-audio", "pending-sent", "sync-failure", "sync-repair", "watch-auto-stop-disabled"].contains(arguments[index + 1]) else {
+               "pending-audio", "pending-sent", "sync-failure", "sync-repair", "watch-auto-stop-disabled",
+               "watch-app-not-installed"].contains(arguments[index + 1]) else {
             throw WhimServiceError.setupRequired("Unknown development peer scenario.")
         }
         let audio: URL
@@ -157,5 +163,17 @@ public final class DebugPeerTransport: PeerTransport, @unchecked Sendable {
     }
     public func transferFile(at url: URL, metadata: ConnectivityEnvelope) throws {}
     public func updateContext(_ envelope: ConnectivityEnvelope, credentials: StoredWebhookCredentials?) throws {}
+}
+
+private struct DebugWatchAppNotInstalledSession: WatchConnectivitySession {
+    let isAvailable = false
+    let isActivated = true
+    let isReachable = false
+    let unavailabilityReason: PeerUnavailabilityReason? = .appNotInstalled
+    func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void) { receive(.activated) }
+    func transferUserInfo(_ data: Data) throws {}
+    func sendMessage(_ data: Data) {}
+    func transferFile(_ url: URL, metadata: Data) throws {}
+    func updateApplicationContext(_ data: Data, credentials: Data?) throws {}
 }
 #endif

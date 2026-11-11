@@ -4,6 +4,40 @@ import XCTest
 @testable import WhimCore
 
 final class WhimServiceIntegrationTests: XCTestCase {
+    // Break: the adapter, merge service, or facade drops the system's reason before Settings.
+    func testSettingsExplainSystemWatchUnavailabilityAndClearTheReasonWhenAvailable() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let session = SettingsConnectivitySession()
+        let peer = try ConnectivityMergeService(store: h.store, files: h.files, databaseURL: h.databaseURL,
+            root: h.root.appendingPathComponent("Peer"), device: .iphone,
+            transport: WatchConnectivityAdapter(session: session))
+        let client: any WhimClient = h.makeService(peer: peer)
+
+        // These are literal system-boundary responses, not a fake implementation of reason selection.
+        for (activated, reason, expected) in [
+            (false, PeerUnavailabilityReason.inactive, "inactive"),
+            (true, .unpaired, "unpaired"),
+            (true, .appNotInstalled, "appNotInstalled")
+        ] {
+            session.set(available: false, activated: activated, reason: reason)
+            let unavailable = try await client.settings().watch
+            XCTAssertEqual(unavailable.availability, "unavailable")
+            XCTAssertEqual(unavailable.availabilityReason, expected)
+
+            // An installed, activated, paired Watch stays available while unreachable.
+            // Even a stale boundary reason must disappear from the available projection.
+            session.set(available: true, activated: true, reason: reason)
+            let available = try await client.settings().watch
+            XCTAssertEqual(available.availability, "available")
+            XCTAssertNil(available.availabilityReason)
+        }
+        session.set(available: false, activated: true, reason: nil)
+        let unknown = try await client.settings().watch
+        XCTAssertEqual(unknown.availability, "unavailable")
+        XCTAssertNil(unknown.availabilityReason, "A system with no known reason must remain unexplained")
+    }
+
     // Break: iPhone trusts draft revision metadata or never publishes a saved offline choice.
     func testPhoneWatchPreferencesAllocateRevisionAndPublishAfterReconnectionWithoutWebhook() async throws {
         let h = try WhimFacadeHarness()
@@ -1050,6 +1084,24 @@ private func collectEvents(_ stream: AsyncStream<WhimEvent>, until kind: WhimEve
     let values = await result.value
     timeout.cancel()
     return values
+}
+
+/// Fakes only the WCSession boundary; reason selection remains covered by its domain tests.
+private final class SettingsConnectivitySession: WatchConnectivitySession, @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: (available: Bool, activated: Bool, reason: PeerUnavailabilityReason?) = (false, false, nil)
+    var isAvailable: Bool { lock.withLock { state.available } }
+    var isActivated: Bool { lock.withLock { state.activated } }
+    var unavailabilityReason: PeerUnavailabilityReason? { lock.withLock { state.reason } }
+    var isReachable: Bool { false }
+    func set(available: Bool, activated: Bool, reason: PeerUnavailabilityReason?) {
+        lock.withLock { state = (available, activated, reason) }
+    }
+    func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void) {}
+    func transferUserInfo(_ data: Data) throws {}
+    func sendMessage(_ data: Data) {}
+    func transferFile(_ url: URL, metadata: Data) throws {}
+    func updateApplicationContext(_ data: Data, credentials: Data?) throws {}
 }
 
 private final class WhimFacadeHarness: @unchecked Sendable {
