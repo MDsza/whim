@@ -275,7 +275,7 @@ public actor ConnectivityMergeService {
                 // (e.g. audio unreadable on this device) skips the peer's record: rejecting it
                 // would fail every later recovery pass and block all peer sync.
                 do {
-                    if case .started = attempt, note.requiresReview { try await store.send(noteID: id) }
+                    if note.requiresReview { try await store.send(noteID: id) }
                     _ = try await store.apply(attempt.event, to: id)
                 } catch WhimStoreError.notEligible { continue }
             case .receipt(let receipt): _ = try await store.apply(.receipt(receipt), to: id)

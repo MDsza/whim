@@ -838,6 +838,101 @@ final class ConnectivityMergeTests: XCTestCase {
         XCTAssertEqual(note?.requiresReview, false)
     }
 
+    func testFailedOnlyPeerAttemptOnRecoveredNoteFollowsExplicitSendAcrossRecovery() async throws {
+        let h = try SyncHarness(); defer { h.remove() }
+        let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Recovered recording",
+            titleSource: .recovered, createdAt: Date(), duration: 1, source: .appleWatch,
+            captureOutcome: .recovered, requiresReview: true)
+        let envelope = ConnectivityEnvelope(payload: .noteMetadata(metadata))
+        let merge = try h.merge()
+        _ = try await merge.receiveFile(at: h.fixture, metadata: envelope)
+        _ = try await merge.apply(envelope)
+        let imported = try await h.store.note(id: metadata.id)
+        XCTAssertEqual(imported?.requiresReview, true)
+
+        // Send clears review on Watch, but the Attempt fails before synchronization.
+        // queueNote sends only the finished failure, without a separate started event.
+        let attempt = Attempt(noteID: metadata.id, configurationRevisionID: ConfigurationRevisionID(), device: .appleWatch,
+            endpoint: .init(scheme: "https", host: "example.com", path: "/receive"), startedAt: Date())
+        let sentMetadata = NoteTransfer(id: metadata.id, recordingSessionID: metadata.recordingSessionID,
+            title: metadata.title, titleSource: metadata.titleSource, createdAt: metadata.createdAt,
+            duration: metadata.duration, source: metadata.source, captureOutcome: metadata.captureOutcome, requiresReview: false)
+        let restarted = try h.merge()
+        _ = try await restarted.apply(.init(payload: .noteMetadata(sentMetadata)))
+        _ = try await restarted.apply(.init(payload: .attempt(.failed(.init(attempt: attempt, failedAt: Date(), reason: .network)))))
+        try await restarted.recover()
+        try await h.merge().recover()
+        let note = try await h.store.note(id: metadata.id)
+        XCTAssertEqual(note?.requiresReview, false)
+        let attempts = try await h.store.deliveryAttempts(noteID: metadata.id)
+        XCTAssertEqual(attempts.map(\.id), [attempt.id])
+        XCTAssertEqual(note?.delivery.failedAttempts.first?.reason, .network)
+    }
+
+    func testRecoveredPeerNoteWithoutAttemptRemainsReviewRequiredAcrossRecovery() async throws {
+        let h = try SyncHarness(); defer { h.remove() }
+        let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Recovered recording",
+            titleSource: .recovered, createdAt: Date(), duration: 1, source: .appleWatch,
+            captureOutcome: .recovered, requiresReview: true)
+        let envelope = ConnectivityEnvelope(payload: .noteMetadata(metadata))
+        let merge = try h.merge()
+        _ = try await merge.receiveFile(at: h.fixture, metadata: envelope)
+        _ = try await merge.apply(envelope)
+        try await merge.recover()
+        try await h.merge().recover()
+        let note = try await h.store.note(id: metadata.id)
+        XCTAssertEqual(note?.requiresReview, true)
+        XCTAssertEqual(note?.isDeliveryEligible, false)
+    }
+
+    func testPeerAttemptOnRecoveredNoteWithLocalAudioErrorDoesNotBlockRecovery() async throws {
+        for failed in [false, true] {
+            let h = try SyncHarness(); defer { h.remove() }
+            let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Recovered recording",
+                titleSource: .recovered, createdAt: Date(), duration: 1, source: .appleWatch,
+                captureOutcome: .recovered, requiresReview: true)
+            let envelope = ConnectivityEnvelope(payload: .noteMetadata(metadata))
+            let merge = try h.merge()
+            _ = try await merge.receiveFile(at: h.fixture, metadata: envelope)
+            _ = try await merge.apply(envelope)
+            try await h.store.recordLocalError(.unreadable, noteID: metadata.id)
+            let attempt = Attempt(noteID: metadata.id, configurationRevisionID: ConfigurationRevisionID(), device: .appleWatch,
+                endpoint: .init(scheme: "https", host: "example.com", path: "/receive"), startedAt: Date())
+            let transfer: AttemptTransfer = failed
+                ? .failed(.init(attempt: attempt, failedAt: Date(), reason: .network)) : .started(attempt)
+            _ = try await merge.apply(.init(payload: .attempt(transfer)))
+            try await merge.recover()
+            try await h.merge().recover()
+            let note = try await h.store.note(id: metadata.id)
+            XCTAssertEqual(note?.requiresReview, true)
+            XCTAssertEqual(note?.localError, .unreadable)
+            XCTAssertEqual(note?.isDeliveryEligible, false)
+        }
+    }
+
+    func testPeerAttemptMergePropagatesInvalidEventInsteadOfTreatingItAsIneligible() async throws {
+        let h = try SyncHarness(); defer { h.remove() }
+        let merge = try h.merge()
+        let ids = [NoteID(), NoteID()]
+        for id in ids {
+            let metadata = NoteTransfer(id: id, recordingSessionID: RecordingSessionID(), title: "Watch recording",
+                titleSource: .timestamp, createdAt: Date(), duration: 1, source: .appleWatch,
+                captureOutcome: .completed, requiresReview: false)
+            let envelope = ConnectivityEnvelope(payload: .noteMetadata(metadata))
+            _ = try await merge.receiveFile(at: h.fixture, metadata: envelope)
+            _ = try await merge.apply(envelope)
+        }
+        let attempt = Attempt(noteID: ids[0], configurationRevisionID: ConfigurationRevisionID(), device: .appleWatch,
+            endpoint: .init(scheme: "https", host: "example.com", path: "/receive"), startedAt: Date())
+        _ = try await merge.apply(.init(payload: .attempt(.started(attempt))))
+        let conflicting = Attempt(id: attempt.id, noteID: ids[1], configurationRevisionID: attempt.configurationRevisionID,
+            device: attempt.device, endpoint: attempt.endpoint, startedAt: attempt.startedAt)
+        do {
+            _ = try await merge.apply(.init(payload: .attempt(.failed(.init(attempt: conflicting, failedAt: Date(), reason: .network)))))
+            XCTFail("An Attempt ID belonging to another Note must be rejected")
+        } catch WhimStoreError.invalidEvent { }
+    }
+
     func testTruncatedNoteAudioFromInterruptedImportIsReplaced() async throws {
         let h = try SyncHarness(); defer { h.remove() }
         let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Watch recording",
