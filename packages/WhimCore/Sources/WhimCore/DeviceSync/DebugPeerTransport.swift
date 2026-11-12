@@ -169,6 +169,8 @@ private struct DebugWatchAppNotInstalledSession: WatchConnectivitySession {
     let isAvailable = false
     let isActivated = true
     let isReachable = false
+    let outstandingUserInfo: [Data] = []
+    let outstandingFileMetadata: [Data] = []
     let unavailabilityReason: PeerUnavailabilityReason? = .appNotInstalled
     func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void) { receive(.activated) }
     func transferUserInfo(_ data: Data) throws {}

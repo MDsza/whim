@@ -1094,6 +1094,8 @@ private final class SettingsConnectivitySession: WatchConnectivitySession, @unch
     var isActivated: Bool { lock.withLock { state.activated } }
     var unavailabilityReason: PeerUnavailabilityReason? { lock.withLock { state.reason } }
     var isReachable: Bool { false }
+    let outstandingUserInfo: [Data] = []
+    let outstandingFileMetadata: [Data] = []
     func set(available: Bool, activated: Bool, reason: PeerUnavailabilityReason?) {
         lock.withLock { state = (available, activated, reason) }
     }
