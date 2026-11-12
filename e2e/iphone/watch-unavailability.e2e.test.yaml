@@ -7,7 +7,7 @@ appId: app.whim.ios
 - scrollUntilVisible:
     element: Watch synchronization unavailable.
     direction: DOWN
-- assertNotVisible:
+- assertVisible:
     id: watch-unavailability-reason
 - stopApp
 - launchApp:
@@ -28,4 +28,42 @@ appId: app.whim.ios
     direction: DOWN
 - assertVisible:
     id: watch-unavailability-reason
-    text: 'iOS reports that Whim is not installed on your Apple Watch\..*Install it from the Watch app on this iPhone\..*'
+    text: 'iOS reports that Whim is not installed on your Apple Watch\.'
+
+- assertVisible:
+    id: watch-unavailability-recovery
+- scrollUntilVisible:
+    element:
+      id: watch-technical-details
+    direction: DOWN
+- tapOn:
+    id: watch-technical-details
+- scrollUntilVisible:
+    element: Whim installed on Watch
+    direction: DOWN
+- assertVisible: 'No'
+- stopApp
+- launchApp:
+    arguments:
+      -WhimFixtureAudio: ${WHIM_FIXTURE_AUDIO}
+      -WhimFixtureWebhookURL: ${WHIM_WEBHOOK_TEST_URL}
+      -WhimPeerScenario: watch-connection-activation-failed
+- extendedWaitUntil:
+    visible:
+      id: whim-home
+    timeout: 30000
+- tapOn: Settings
+- tapOn:
+    id: settings-watch
+- scrollUntilVisible:
+    element:
+      id: watch-technical-details
+    direction: DOWN
+- assertVisible: 'iOS could not start the Watch connection\..*'
+- tapOn:
+    id: watch-technical-details
+- scrollUntilVisible:
+    element: '7004'
+    direction: DOWN
+- assertVisible: WCErrorDomain
+- assertVisible: '7004'

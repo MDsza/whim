@@ -4,6 +4,55 @@ import XCTest
 @testable import WhimCore
 
 final class WhimServiceIntegrationTests: XCTestCase {
+    func testStatusChangePublishesSettingsWithoutStartingRecovery() async throws {
+        let h = try WhimFacadeHarness(); defer { h.remove() }
+        let entered = expectation(description: "Status refresh must not start recovery")
+        entered.isInverted = true
+        let files = SuspendedRecoveryFiles(base: h.files, entered: entered, blockInventory: true)
+        defer { files.release() }
+        let client = h.makeService(recoveryFiles: files)
+        let events = client.events()
+        let finished = expectation(description: "Status event returns without recovery")
+        let task = Task { try await client.receivePeer(.statusChanged); finished.fulfill() }
+        await fulfillment(of: [finished], timeout: 1)
+        await fulfillment(of: [entered], timeout: 0.1)
+        files.release()
+        try await task.value
+        let received = await collectEvents(events, until: .settingsChanged)
+        XCTAssertEqual(received.map(\.type), [.settingsChanged])
+    }
+
+    // Break: diagnostics disappear at either owned forwarding layer before Settings.
+    func testSettingsCarrySafeLiveConnectionFactsThroughTheRealAdapter() async throws {
+        let h = try WhimFacadeHarness()
+        defer { h.remove() }
+        let session = SettingsConnectivitySession()
+        let failure = SynchronizationSystemError(error: NSError(domain: "WCErrorDomain", code: 7004,
+            userInfo: [NSLocalizedDescriptionKey: "/private/audio.m4a token=secret"]),
+            observedAt: Date(timeIntervalSince1970: 1_790_000_000))
+        let facts = PeerConnectionDetails(supported: true, activationState: "notActivated", paired: true,
+            counterpartAppInstalled: true, reachable: false, pendingStateTransfers: 2, pendingAudioTransfers: 1,
+            activationFailure: failure)
+        session.set(available: false, activated: false, reason: .inactive, details: facts)
+        let peer = try ConnectivityMergeService(store: h.store, files: h.files, databaseURL: h.databaseURL,
+            root: h.root.appendingPathComponent("Peer"), device: .iphone,
+            transport: WatchConnectivityAdapter(session: session))
+        let client: any WhimClient = h.makeService(peer: peer)
+        let settings = try await client.settings()
+        XCTAssertEqual(settings.watch.connectionDetails, facts)
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(settings), as: UTF8.self).contains("secret"))
+
+        session.set(available: true, activated: true, reason: nil,
+            details: .init(supported: true, activationState: "activated", paired: true,
+                counterpartAppInstalled: true, reachable: false, lastTransferFailure: failure))
+        let available = try await client.settings().watch
+        XCTAssertEqual(available.availability, "available")
+        XCTAssertNil(available.availabilityReason)
+        XCTAssertEqual(available.connectionDetails?.reachable, false)
+        XCTAssertNil(available.connectionDetails?.activationFailure)
+        XCTAssertEqual(available.connectionDetails?.lastTransferFailure, failure)
+    }
+
     // Break: the adapter, merge service, or facade drops the system's reason before Settings.
     func testSettingsExplainSystemWatchUnavailabilityAndClearTheReasonWhenAvailable() async throws {
         let h = try WhimFacadeHarness()
@@ -17,6 +66,7 @@ final class WhimServiceIntegrationTests: XCTestCase {
         // These are literal system-boundary responses, not a fake implementation of reason selection.
         for (activated, reason, expected) in [
             (false, PeerUnavailabilityReason.inactive, "inactive"),
+            (false, .unsupported, "unsupported"),
             (true, .unpaired, "unpaired"),
             (true, .appNotInstalled, "appNotInstalled")
         ] {
@@ -1090,14 +1140,16 @@ private func collectEvents(_ stream: AsyncStream<WhimEvent>, until kind: WhimEve
 private final class SettingsConnectivitySession: WatchConnectivitySession, @unchecked Sendable {
     private let lock = NSLock()
     private var state: (available: Bool, activated: Bool, reason: PeerUnavailabilityReason?) = (false, false, nil)
+    private var details: PeerConnectionDetails?
     var isAvailable: Bool { lock.withLock { state.available } }
     var isActivated: Bool { lock.withLock { state.activated } }
     var unavailabilityReason: PeerUnavailabilityReason? { lock.withLock { state.reason } }
     var isReachable: Bool { false }
+    var connectionDetails: PeerConnectionDetails? { lock.withLock { details } }
     let outstandingUserInfo: [Data] = []
     let outstandingFileMetadata: [Data] = []
-    func set(available: Bool, activated: Bool, reason: PeerUnavailabilityReason?) {
-        lock.withLock { state = (available, activated, reason) }
+    func set(available: Bool, activated: Bool, reason: PeerUnavailabilityReason?, details: PeerConnectionDetails? = nil) {
+        lock.withLock { state = (available, activated, reason); self.details = details }
     }
     func activate(receive: @escaping @Sendable (ConnectivitySessionEvent) -> Void) {}
     func transferUserInfo(_ data: Data) throws {}

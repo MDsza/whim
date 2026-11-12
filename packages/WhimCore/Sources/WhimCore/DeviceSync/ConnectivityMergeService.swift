@@ -454,7 +454,8 @@ public actor ConnectivityMergeService {
             lastSynchronizedAt: try journal.read("lastSynchronizedAt", as: [Date].self)?.first,
             resetState: reset.generation == .initial ? "idle" : endpoints.count >= 2 ? "synchronized" : "pending",
             recordingPreferencesState: preferenceState,
-            availabilityReason: available ? nil : transport?.unavailabilityReason?.rawValue)
+            availabilityReason: available ? nil : transport?.unavailabilityReason?.rawValue,
+            connectionDetails: transport?.connectionDetails)
     }
 
     public func generation() throws -> ResetGeneration { try journal.resetState().generation }
