@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-12
 
-**Status:** Proposed for approval
+**Status:** Approved by the user on 2026-11-12
 
 ## Intent and selected approach
 
