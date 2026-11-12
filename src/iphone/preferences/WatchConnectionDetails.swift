@@ -30,7 +30,13 @@ public struct WatchConnectionDetails: Sendable {
             case "inactive":
                 if let failure = facts?.activationFailure {
                     cause = "iOS could not start the Watch connection. " + synchronizationErrorLabel(failure)
-                    recovery = "Close and reopen Whim on both devices, then refresh status."
+                    switch failure.category {
+                    case "deviceNotPaired": recovery = "Open the Watch app on this iPhone to pair your Apple Watch, then refresh status."
+                    case "watchAppNotInstalled": recovery = "Check or complete Whim’s installation in the Watch app on this iPhone, then open Whim on your Watch."
+                    case "sessionNotSupported": recovery = "You can keep recording Notes on this iPhone."
+                    case "storageFull": recovery = "Check available storage on both devices, then reopen Whim and refresh status."
+                    default: recovery = "Close and reopen Whim on both devices, then refresh status."
+                    }
                 } else {
                     cause = "The connection to your Apple Watch has not started yet."
                     recovery = "Open Whim on both devices, then refresh status."

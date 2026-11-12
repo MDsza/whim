@@ -82,6 +82,7 @@ let productionSources = [
     "WebhookConfiguration/WebhookRequestBuilder.swift",
 ]
 let unitTestSources = [
+    "DeviceSync/AudioSynchronization.test.swift",
     "DeviceSync/PeerConnectionDetails.test.swift",
     "Preferences/WatchRecordingPreferences.test.swift",
     "Maintenance/WatchBackgroundScheduler.test.swift",

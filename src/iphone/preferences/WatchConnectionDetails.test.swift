@@ -21,6 +21,13 @@ final class WatchConnectionDetailsTests: XCTestCase {
             XCTAssertFalse(value.recovery?.contains("remove") == true)
         }
     }
+    func testObservedActivationCausesOfferTheMatchingRecoveryAction() {
+        for (code, action) in [(7005, "pair"), (7006, "installation"), (7015, "storage")] {
+            let failure = SynchronizationSystemError(error: NSError(domain: "WCErrorDomain", code: code), observedAt: Date())
+            let value = details("inactive", facts: .init(activationFailure: failure))
+            XCTAssertTrue(value.recovery?.contains(action) == true, "WCErrorDomain \(code)")
+        }
+    }
     func testUnknownIsExplicitAndMissingFactsAreNotInvented() {
         for reason in [nil, "futureReason"] {
             let value = details(reason)

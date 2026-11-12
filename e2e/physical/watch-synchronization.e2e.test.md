@@ -81,3 +81,28 @@ counts and screenshots for each case. Do not enable DEBUG fixture switches.
 
 All eight cases block release until evidence is recorded. Simulator passes do not
 satisfy real transferFile, locked-device background execution, or paired race acceptance.
+
+## Cause, recovery and technical details acceptance (execution pending)
+
+- For each unavailable state above, confirm Settings shows the observed cause and
+  a suitable recovery action. Confirm Refresh status reads the current state and
+  never starts a recording or removes Notes. With no reported cause, expect the
+  explicit unknown explanation rather than a guessed pairing or installation error.
+- Expand Technical details and compare support, activation, pairing, installation,
+  reachability and queued state/audio counts with the test devices. Reproduce an
+  activation or background transfer error when possible; verify its safe domain,
+  code and observed time. Successful activation clears the activation error;
+  a historical transfer error remains labelled separately and cannot change current
+  availability. Unreported facts say Not reported. Do not provoke an error by
+  deleting a user's only audio copy.
+- For unreadable received audio, missing/expired Watch source audio, and an observed
+  local save failure, confirm Note details separates the cause, recovery guidance,
+  transfer cycle and retry history from webhook Delivery attempts. Retry sync
+  clears the active cause for its new cycle. A valid repair keeps historical retry
+  causes and a Sent Receipt. Missing source audio must not be promised recoverable.
+- Check both collapsed and expanded sections with VoiceOver and the largest
+  accessibility text sizes. Actions and disclosure controls must remain reachable,
+  labels/values must be read in order, and identifiers/codes must wrap without
+  clipping. Verify these on physical iPhone and paired Watch; simulator XCTest and
+  Maestro evidence does not sign off OS pairing reports, radio transfers or spoken
+  VoiceOver/Dynamic Type acceptance.
