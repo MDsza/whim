@@ -19,6 +19,13 @@ counts and screenshots for each case. Do not enable DEBUG fixture switches.
    with the same Note ID, enriches its title and delivers. Watch receives Sent and
    the title without foreground interaction. Repeat with state before file and file
    before state by controlling device connectivity; confirm one Note per ID.
+   While the system holds userInfo and audio-file transfers, trigger repeated
+   activation/reachability changes and relaunch the sender. Record outstanding
+   transfer counts: replay must not add copies of the same message ID, including
+   transfers queued but not yet scheduled by WCSession. Once a held transfer
+   completes or is canceled, an unacknowledged replay may enqueue it again.
+   Deterministic adapter tests cover suppression and release with a fake system
+   queue; WCSession persistence, scheduling and completion require these devices.
 2. **Direct race:** configure both devices, record on Watch, stop while both can reach
    the receiver. Observe distinct Watch and iPhone Attempt IDs for the same Note ID.
    The receiver creates one logical Note. Return success to one and failure/timeout
