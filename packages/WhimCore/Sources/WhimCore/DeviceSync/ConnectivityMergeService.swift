@@ -216,8 +216,16 @@ public actor ConnectivityMergeService {
             }
             guard try files.durableAudio(noteID: metadata.id) != nil else { throw ConnectivityError.invalidFile }
         } catch {
-            let currentMetadata = existing.map { NoteTransfer($0, audioRequestID: $0.audioSynchronization?.requestID) } ?? metadata
-            await recordSaveFailure(error, metadata: currentMetadata)
+            // The pending file belongs to the received request, which can be older than
+            // the Note's current retry. Preserve that identity across recovery, too.
+            var receivedMetadata = metadata
+            if let data = try? Data(contentsOf: pending.appendingPathExtension("plist")),
+               let envelope = try? ConnectivityEnvelope.decode(data),
+               envelope.generation == (try? generation()),
+               case .noteMetadata(let received) = envelope.payload, received.id == metadata.id {
+                receivedMetadata = received
+            }
+            await recordSaveFailure(error, metadata: receivedMetadata)
             throw error
         }
         if try await store.note(id: metadata.id)?.audioSynchronization != nil {

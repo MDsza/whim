@@ -22,6 +22,7 @@ struct TechnicalDetailsView<Content: View>: View {
         } label: {
             Text("Technical details").frame(minHeight: 44)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
 }

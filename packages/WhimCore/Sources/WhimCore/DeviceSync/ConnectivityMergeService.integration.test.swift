@@ -4,6 +4,44 @@ import GRDB
 @testable import WhimCore
 
 final class ConnectivityMergeTests: XCTestCase {
+    func testLateReadableFileCannotAttributeItsSaveFailureToANewerRequestDuringImportOrRecovery() async throws {
+        let h = try SyncHarness(); defer { h.remove() }
+        let metadata = NoteTransfer(id: NoteID(), recordingSessionID: RecordingSessionID(), title: "Late file",
+            titleSource: .timestamp, createdAt: Date(), duration: 1, source: .appleWatch,
+            captureOutcome: .completed, requiresReview: false)
+        let merge = try h.merge()
+        _ = try await merge.apply(.init(payload: .noteMetadata(metadata)))
+        try await merge.retryAudio(metadata.id)
+        let firstValue = try await h.store.note(id: metadata.id)
+        let first = try XCTUnwrap(firstValue)
+        let oldID = try XCTUnwrap(first.audioSynchronization?.requestID)
+        try await merge.retryAudio(metadata.id) // supersede A with B
+        let newerValue = try await h.store.note(id: metadata.id)
+        let newer = try XCTUnwrap(newerValue)
+        let newerID = try XCTUnwrap(newer.audioSynchronization?.requestID)
+        _ = try await merge.apply(.init(payload: .audioUnavailable(.init(noteID: metadata.id,
+            requestID: newerID, reason: "missingAudio"))))
+        let acceptedValue = try await h.store.note(id: metadata.id)
+        let accepted = try XCTUnwrap(acceptedValue)
+        let failing = try ConnectivityMergeService(store: h.store, files: FailingSyncDurabilityFiles(base: h.files),
+            databaseURL: h.root.appendingPathComponent("whim.sqlite"), root: h.root.appendingPathComponent("Peer"), device: .iphone)
+        let late = ConnectivityEnvelope(payload: .noteMetadata(.init(first, audioRequestID: oldID)))
+        for recovering in [false, true] {
+            do {
+                if recovering { try await failing.recover() }
+                else { _ = try await failing.receiveFile(at: h.fixture, metadata: late) }
+                XCTFail("Expected the original durability error")
+            } catch {
+                XCTAssertEqual((error as NSError).domain, NSPOSIXErrorDomain)
+                XCTAssertEqual((error as NSError).code, Int(POSIXErrorCode.ENOSPC.rawValue))
+            }
+            let current = try await h.store.note(id: metadata.id)
+            XCTAssertEqual(current?.audioSynchronization, accepted.audioSynchronization)
+            XCTAssertEqual(current?.audioSynchronizationRetries, accepted.audioSynchronizationRetries)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: try h.pendingAudio(metadata.id).path))
+        }
+    }
+
     func testWatchSourceChecksReportOnlyObservedReasonsToThePhoneProjection() async throws {
         for reason in ["missingNote", "missingAudio", "unreadableAudio", "expiredAudio", "sourceNotReady"] {
             let watch = try SyncHarness(); defer { watch.remove() }
